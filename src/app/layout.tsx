@@ -25,6 +25,16 @@ export const metadata: Metadata = {
     template: `%s | ${site.name}`
   },
   description: site.description,
+  icons: {
+    icon: [
+      {
+        url: "/edward-trading-favicon.png",
+        type: "image/png"
+      }
+    ],
+    shortcut: "/edward-trading-favicon.png",
+    apple: "/edward-trading-favicon.png"
+  },
   keywords: [
     "Edward Trading Pvt. Ltd.",
     "cleaning solutions Nepal",
