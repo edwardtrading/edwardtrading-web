@@ -1,0 +1,64 @@
+
+> edward-trading-website@1.0.0 dev
+> next dev -p 3002
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3002
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.3s
+ ○ Compiling / ...
+ ✓ Compiled / in 14.6s (1430 modules)
+ ✓ Compiled in 1648ms (680 modules)
+ ✓ Compiled in 359ms (666 modules)
+ GET / 200 in 17087ms
+ GET / 200 in 273ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 2.2s (1454 modules)
+ GET /admin 200 in 3468ms
+ POST /admin 200 in 761ms
+ POST /admin 200 in 1131ms
+ ○ Compiling /about ...
+ ✓ Compiled /about in 1392ms (1460 modules)
+ GET /about 200 in 632ms
+ GET /admin 200 in 977ms
+ POST /admin 200 in 1004ms
+ GET /admin 200 in 849ms
+ POST /admin 200 in 903ms
+ POST /admin 200 in 596ms
+ ✓ Compiled in 5.3s (682 modules)
+ ✓ Compiled in 3.1s (1474 modules)
+ ✓ Compiled in 756ms (682 modules)
+ ✓ Compiled in 534ms (682 modules)
+ ✓ Compiled in 1215ms (1418 modules)
+ ✓ Compiled in 1308ms (1418 modules)
+ ✓ Compiled in 1615ms (1418 modules)
+ ✓ Compiled in 501ms (681 modules)
+ ✓ Compiled in 563ms (681 modules)
+ ✓ Compiled in 2.2s (1401 modules)
+ ✓ Compiled in 422ms (735 modules)
+ ✓ Compiled in 1164ms (1415 modules)
+ ✓ Compiled in 925ms (1415 modules)
+ ✓ Compiled in 770ms (1415 modules)
+ ✓ Compiled in 586ms (680 modules)
+ ✓ Compiled in 484ms (680 modules)
+ ✓ Compiled in 499ms (1401 modules)
+ ✓ Compiled in 237ms (735 modules)
+ ✓ Compiled in 1090ms (1415 modules)
+ ✓ Compiled in 678ms (680 modules)
+ ✓ Compiled in 563ms (680 modules)
+ ✓ Compiled in 1377ms (1415 modules)
+ ✓ Compiled in 551ms (680 modules)
+ ✓ Compiled in 636ms (680 modules)
+ ✓ Compiled in 7.7s (1415 modules)
+ ✓ Compiled in 1085ms (1415 modules)
+ ✓ Compiled in 626ms (680 modules)
+ ✓ Compiled in 645ms (680 modules)
+ ✓ Compiled in 561ms (680 modules)
+ ✓ Compiled in 570ms (680 modules)
+ ✓ Compiled in 1029ms (680 modules)
+ ✓ Compiled in 692ms (680 modules)
+ ✓ Compiled in 719ms (680 modules)
+ ✓ Compiled in 1503ms (680 modules)
+ ✓ Compiled in 3.8s (680 modules)
