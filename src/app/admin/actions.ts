@@ -90,7 +90,7 @@ async function saveUpload(
 
 function requireDatabase() {
   if (!hasDatabaseConfig()) {
-    throw new Error("Database credentials are not configured.");
+    throw new Error("The production content service is not configured.");
   }
 
   return getDatabaseClient();
@@ -146,12 +146,13 @@ async function ensureCmsPageVideoColumn() {
 }
 
 function getSessionSecret() {
-  return (
-    process.env.ADMIN_SESSION_SECRET ||
-    process.env.DATABASE_AUTH_TOKEN ||
-    process.env.ADMIN_PASSWORD ||
-    "edward-trading-local-admin-session"
-  );
+  const secret = process.env.ADMIN_SESSION_SECRET;
+
+  if (!secret) {
+    throw new Error("ADMIN_SESSION_SECRET is required for admin sessions.");
+  }
+
+  return secret;
 }
 
 function sign(value: string) {
@@ -276,9 +277,14 @@ function setAdminCookie(email: string, role = "admin") {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: sessionMaxAge,
     path: "/admin"
   });
+}
+
+function redirectToAdminSession(formData: FormData) {
+  const returnTo = clean(formData.get("returnTo")) || "/admin";
+  const separator = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${separator}admin_login=1`);
 }
 
 function revalidateCmsPaths() {
@@ -313,7 +319,7 @@ export async function loginAdmin(formData: FormData) {
   if (databaseUser) {
     setAdminCookie(databaseUser.email, databaseUser.role);
     revalidatePath("/admin");
-    return;
+    redirectToAdminSession(formData);
   }
 
   const expected = process.env.ADMIN_PASSWORD;
@@ -331,11 +337,17 @@ export async function loginAdmin(formData: FormData) {
   setAdminCookie(email);
   revalidatePath("/admin");
   revalidatePath("/admin/access");
-  redirectToSaved(formData, "Admin user saved.");
+  redirectToAdminSession(formData);
 }
 
 export async function logoutAdmin() {
-  cookies().delete(adminCookieName);
+  cookies().set(adminCookieName, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    expires: new Date(0),
+    path: "/admin"
+  });
   revalidatePath("/admin");
 }
 

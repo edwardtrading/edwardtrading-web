@@ -89,7 +89,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
               ) : null}
               {submitted === "unavailable" ? (
                 <div className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                  Online inquiry storage is not available yet. Please contact us by phone or email.
+                  Online inquiries are temporarily unavailable. Please contact us by phone or email.
                 </div>
               ) : null}
               <div className="grid gap-5 md:grid-cols-2">

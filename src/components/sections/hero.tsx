@@ -158,7 +158,7 @@ export function Hero({ content }: { content: CmsPage }) {
         </motion.div>
       </div>
       <div className="container-page -mt-5 grid gap-3 pb-10 sm:grid-cols-3">
-        {["Diagnostic Equipment", "Healthcare Products", "Cleaning & Hygiene"].map(
+        {["Hygiene & Housekeeping Solutions", "Healthcare Products", "Hospital Furnitures"].map(
           (item) => (
             <a
               key={item}

@@ -254,7 +254,7 @@ export default async function ProductPage({
               ) : null}
               {searchParams?.inquiry === "unavailable" ? (
                 <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                  Inquiry storage is unavailable. Please call or email us.
+                  Online inquiries are temporarily unavailable. Please call or email us.
                 </p>
               ) : null}
             </div>

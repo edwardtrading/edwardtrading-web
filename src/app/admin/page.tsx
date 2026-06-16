@@ -11,7 +11,13 @@ export const metadata: Metadata = {
 export default function AdminPage({
   searchParams
 }: {
-  searchParams?: { saved?: string };
+  searchParams?: { saved?: string; admin_login?: string };
 }) {
-  return <AdminScreen section="overview" savedMessage={searchParams?.saved} />;
+  return (
+    <AdminScreen
+      section="overview"
+      savedMessage={searchParams?.saved}
+      loginSessionStarted={searchParams?.admin_login === "1"}
+    />
+  );
 }

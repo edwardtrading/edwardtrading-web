@@ -785,7 +785,7 @@ export function AdminWorkspace({
             icon={Database}
             eyebrow="Workspace"
             title="Website content dashboard"
-            description="Use the tabs on the left like the website navigation. The site structure is built in code; this CMS only edits content, catalog records, visibility, and inquiries."
+            description="Use the tabs on the left like the website navigation. The site structure is fixed by the website; this area edits content, catalog items, visibility, and inquiries."
           />
           <div className="grid gap-4 md:grid-cols-5">
             {[
@@ -1090,7 +1090,7 @@ export function AdminWorkspace({
             icon={Layers3}
             eyebrow="Catalog"
             title="Categories"
-            description="Create and update product categories. Public category cards and category product pages are generated from these records."
+            description="Create and update product categories. Public category cards and category product pages are generated from these entries."
           />
           <details className={panelClass}>
             <AddSummary
@@ -1331,7 +1331,7 @@ export function AdminWorkspace({
             icon={KeyRound}
             eyebrow="Security"
             title="Admin access"
-            description="Create or rotate a database-backed admin user. Environment password login remains available for recovery."
+            description="Create or rotate an admin user. Environment password login remains available for recovery."
           />
           <form action={saveAdminUser} className="grid gap-5 md:grid-cols-2">
             <input type="hidden" name="returnTo" value="/admin/access" />

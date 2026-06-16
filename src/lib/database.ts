@@ -7,7 +7,7 @@ export function hasDatabaseConfig() {
 export function getDatabaseClient() {
   if (!hasDatabaseConfig()) {
     throw new Error(
-      "Database is not configured. Add the database URL and auth token."
+      "The production content service is not configured."
     );
   }
 
