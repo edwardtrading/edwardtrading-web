@@ -44,6 +44,73 @@ function redirectToSaved(formData: FormData, message = "Changes saved and publis
   redirect(`${returnTo}${separator}saved=${encodeURIComponent(message)}`);
 }
 
+function redirectToProblem(formData: FormData, message: string) {
+  const returnTo = clean(formData.get("returnTo")) || "/admin";
+  const separator = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${separator}problem=${encodeURIComponent(message)}`);
+}
+
+/**
+ * `redirect()` reports itself by throwing, so a catch-all must let those through
+ * untouched or every successful save would look like a failure.
+ */
+function isControlFlowError(error: unknown) {
+  const digest = (error as { digest?: unknown } | null)?.digest;
+
+  return (
+    typeof digest === "string" &&
+    (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND")
+  );
+}
+
+/** Turns an exception into something an editor can act on. */
+function describeProblem(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/no such column|no such table/i.test(message)) {
+    return "The website content store is still being updated. Wait a moment and try saving again.";
+  }
+
+  if (/UNIQUE constraint failed/i.test(message)) {
+    return "Another item is already using that web address. Change the web address and save again.";
+  }
+
+  if (/EROFS|read-only file system|EACCES|ENOSPC/i.test(message)) {
+    return "The image could not be saved on the server. Save the text change without the image, then send the image to your website support team.";
+  }
+
+  if (/Body exceeded|entity too large|413/i.test(message)) {
+    return "That image is too large to upload. Use an image under 10MB and try again.";
+  }
+
+  if (/authentication is required/i.test(message)) {
+    return "Your session has expired. Reload the page and sign in again.";
+  }
+
+  if (/content service is not configured/i.test(message)) {
+    return "Editing is temporarily unavailable. Please contact your website support team.";
+  }
+
+  return `The change could not be saved: ${message}`;
+}
+
+/**
+ * Runs a save and converts any failure into a readable message on the form the
+ * editor came from, instead of the blank server-error page.
+ */
+async function runAdminAction(formData: FormData, work: () => Promise<void>) {
+  try {
+    await work();
+  } catch (error) {
+    if (isControlFlowError(error)) {
+      throw error;
+    }
+
+    console.error("[admin action failed]", error);
+    redirectToProblem(formData, describeProblem(error));
+  }
+}
+
 function linesToJson(value: FormDataEntryValue | null) {
   const items = String(value ?? "")
     .split(/\r?\n/)
@@ -429,459 +496,479 @@ export async function isAdminLoggedIn() {
 }
 
 export async function saveAdminUser(formData: FormData) {
-  await requireAdmin();
-  const db = requireDatabase();
-  const email = clean(formData.get("email")).toLowerCase();
-  const name = clean(formData.get("name")) || "Edward Trading Admin";
-  const password = clean(formData.get("password"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    const db = requireDatabase();
+    const email = clean(formData.get("email")).toLowerCase();
+    const name = clean(formData.get("name")) || "Edward Trading Admin";
+    const password = clean(formData.get("password"));
 
-  if (!email || !password) {
-    throw new Error("Email and password are required.");
-  }
+    if (!email || !password) {
+      throw new Error("Email and password are required.");
+    }
 
-  await db.execute({
-    sql: `INSERT INTO admin_users (
-      id, email, name, password_hash, role, is_active
-    ) VALUES (?, ?, ?, ?, 'admin', 1)
-    ON CONFLICT(email) DO UPDATE SET
-      name = excluded.name,
-      password_hash = excluded.password_hash,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [crypto.randomUUID(), email, name, hashPassword(password)]
+    await db.execute({
+      sql: `INSERT INTO admin_users (
+        id, email, name, password_hash, role, is_active
+      ) VALUES (?, ?, ?, ?, 'admin', 1)
+      ON CONFLICT(email) DO UPDATE SET
+        name = excluded.name,
+        password_hash = excluded.password_hash,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [crypto.randomUUID(), email, name, hashPassword(password)]
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/access");
   });
-
-  revalidatePath("/admin");
-  revalidatePath("/admin/access");
 }
 
 export async function savePageContent(formData: FormData) {
-  await requireAdmin();
-  await ensureCmsPageVideoColumn();
-  await ensureSchemaUpgrades();
-  const db = requireDatabase();
-  const slug = slugify(clean(formData.get("slug")));
-  const uploadedImage = await saveUpload(formData.get("imageFile"), "pages", slug);
-  const uploadedVideo = await saveUpload(
-    formData.get("videoFile"),
-    "page-videos",
-    slug
-  );
-  const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
-  const videoUrl = uploadedVideo || clean(formData.get("videoUrl"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    await ensureCmsPageVideoColumn();
+    await ensureSchemaUpgrades();
+    const db = requireDatabase();
+    const slug = slugify(clean(formData.get("slug")));
+    const uploadedImage = await saveUpload(formData.get("imageFile"), "pages", slug);
+    const uploadedVideo = await saveUpload(
+      formData.get("videoFile"),
+      "page-videos",
+      slug
+    );
+    const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
+    const videoUrl = uploadedVideo || clean(formData.get("videoUrl"));
 
-  await db.execute({
-    sql: `INSERT INTO cms_pages (
-      slug, title, eyebrow, description, image_url, video_url, cta_label, cta_href,
-      meta_title, meta_description, meta_keywords, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(slug) DO UPDATE SET
-      title = excluded.title,
-      eyebrow = excluded.eyebrow,
-      description = excluded.description,
-      image_url = excluded.image_url,
-      video_url = excluded.video_url,
-      cta_label = excluded.cta_label,
-      cta_href = excluded.cta_href,
-      meta_title = excluded.meta_title,
-      meta_description = excluded.meta_description,
-      meta_keywords = excluded.meta_keywords,
-      is_active = excluded.is_active,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      slug,
-      clean(formData.get("title")),
-      clean(formData.get("eyebrow")),
-      clean(formData.get("description")),
-      imageUrl,
-      videoUrl,
-      clean(formData.get("ctaLabel")),
-      clean(formData.get("ctaHref")),
-      clean(formData.get("metaTitle")),
-      clean(formData.get("metaDescription")),
-      keywordsToText(formData.get("metaKeywords")),
-      activeValue(formData)
-    ]
+    await db.execute({
+      sql: `INSERT INTO cms_pages (
+        slug, title, eyebrow, description, image_url, video_url, cta_label, cta_href,
+        meta_title, meta_description, meta_keywords, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(slug) DO UPDATE SET
+        title = excluded.title,
+        eyebrow = excluded.eyebrow,
+        description = excluded.description,
+        image_url = excluded.image_url,
+        video_url = excluded.video_url,
+        cta_label = excluded.cta_label,
+        cta_href = excluded.cta_href,
+        meta_title = excluded.meta_title,
+        meta_description = excluded.meta_description,
+        meta_keywords = excluded.meta_keywords,
+        is_active = excluded.is_active,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        slug,
+        clean(formData.get("title")),
+        clean(formData.get("eyebrow")),
+        clean(formData.get("description")),
+        imageUrl,
+        videoUrl,
+        clean(formData.get("ctaLabel")),
+        clean(formData.get("ctaHref")),
+        clean(formData.get("metaTitle")),
+        clean(formData.get("metaDescription")),
+        keywordsToText(formData.get("metaKeywords")),
+        activeValue(formData)
+      ]
+    });
+
+    revalidateCmsPaths();
+    redirectToSaved(formData, "Page content saved and published.");
   });
-
-  revalidateCmsPaths();
-  redirectToSaved(formData, "Page content saved and published.");
 }
 
 export async function saveResource(formData: FormData) {
-  await requireAdmin();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const key = clean(formData.get("key"));
-  const uploadedFile = await saveUpload(formData.get("resourceFile"), "resources", key);
-  const value = uploadedFile || clean(formData.get("value"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const key = clean(formData.get("key"));
+    const uploadedFile = await saveUpload(formData.get("resourceFile"), "resources", key);
+    const value = uploadedFile || clean(formData.get("value"));
 
-  await db.execute({
-    sql: `INSERT INTO cms_resources (
-      id, resource_key, label, group_name, resource_type, value, metadata,
-      is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(resource_key) DO UPDATE SET
-      label = excluded.label,
-      group_name = excluded.group_name,
-      resource_type = excluded.resource_type,
-      value = excluded.value,
-      metadata = excluded.metadata,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      key,
-      clean(formData.get("label")),
-      clean(formData.get("groupName")),
-      clean(formData.get("type")) || "text",
-      value,
-      metadataToJson(formData.get("metadata")),
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO cms_resources (
+        id, resource_key, label, group_name, resource_type, value, metadata,
+        is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(resource_key) DO UPDATE SET
+        label = excluded.label,
+        group_name = excluded.group_name,
+        resource_type = excluded.resource_type,
+        value = excluded.value,
+        metadata = excluded.metadata,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        key,
+        clean(formData.get("label")),
+        clean(formData.get("groupName")),
+        clean(formData.get("type")) || "text",
+        value,
+        metadataToJson(formData.get("metadata")),
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidateCmsPaths();
+    redirectToSaved(formData, "Resource saved and published.");
   });
-
-  revalidateCmsPaths();
-  redirectToSaved(formData, "Resource saved and published.");
 }
 
 export async function saveProductCategory(formData: FormData) {
-  await requireAdmin();
-  await ensureProductCategoriesTable();
-  await ensureSchemaUpgrades();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const name = clean(formData.get("name"));
-  const slug = slugify(clean(formData.get("slug")) || name);
-  const uploadedImage = await saveUpload(
-    formData.get("imageFile"),
-    "categories",
-    slug
-  );
-  const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    await ensureProductCategoriesTable();
+    await ensureSchemaUpgrades();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const name = clean(formData.get("name"));
+    const slug = slugify(clean(formData.get("slug")) || name);
+    const uploadedImage = await saveUpload(
+      formData.get("imageFile"),
+      "categories",
+      slug
+    );
+    const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
 
-  await db.execute({
-    sql: `INSERT INTO product_categories (
-      id, slug, name, summary, description, image_url,
-      meta_title, meta_description, meta_keywords, is_featured,
-      is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      slug = excluded.slug,
-      name = excluded.name,
-      summary = excluded.summary,
-      description = excluded.description,
-      image_url = excluded.image_url,
-      meta_title = excluded.meta_title,
-      meta_description = excluded.meta_description,
-      meta_keywords = excluded.meta_keywords,
-      is_featured = excluded.is_featured,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      slug,
-      name,
-      clean(formData.get("summary")),
-      clean(formData.get("description")),
-      imageUrl,
-      clean(formData.get("metaTitle")),
-      clean(formData.get("metaDescription")),
-      keywordsToText(formData.get("metaKeywords")),
-      formData.get("isFeatured") ? 1 : 0,
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO product_categories (
+        id, slug, name, summary, description, image_url,
+        meta_title, meta_description, meta_keywords, is_featured,
+        is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        slug = excluded.slug,
+        name = excluded.name,
+        summary = excluded.summary,
+        description = excluded.description,
+        image_url = excluded.image_url,
+        meta_title = excluded.meta_title,
+        meta_description = excluded.meta_description,
+        meta_keywords = excluded.meta_keywords,
+        is_featured = excluded.is_featured,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        slug,
+        name,
+        clean(formData.get("summary")),
+        clean(formData.get("description")),
+        imageUrl,
+        clean(formData.get("metaTitle")),
+        clean(formData.get("metaDescription")),
+        keywordsToText(formData.get("metaKeywords")),
+        formData.get("isFeatured") ? 1 : 0,
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidateCmsPaths();
+    revalidatePath(`/categories/${slug}`);
+    redirectToSaved(formData, "Category saved. Website visibility is updated.");
   });
-
-  revalidateCmsPaths();
-  revalidatePath(`/categories/${slug}`);
-  redirectToSaved(formData, "Category saved. Website visibility is updated.");
 }
 
 export async function saveProduct(formData: FormData) {
-  await requireAdmin();
-  await ensureProductEnhancementColumns();
-  await ensureSchemaUpgrades();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const name = clean(formData.get("name"));
-  const slug = slugify(clean(formData.get("slug")) || name);
-  const categorySlug = clean(formData.get("categorySlug"));
-  const companySlug = clean(formData.get("companySlug"));
-  const uploadedImage = await saveUpload(formData.get("imageFile"), "products", slug);
-  const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    await ensureProductEnhancementColumns();
+    await ensureSchemaUpgrades();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const name = clean(formData.get("name"));
+    const slug = slugify(clean(formData.get("slug")) || name);
+    const categorySlug = clean(formData.get("categorySlug"));
+    const companySlug = clean(formData.get("companySlug"));
+    const uploadedImage = await saveUpload(formData.get("imageFile"), "products", slug);
+    const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
 
-  if (!categorySlug || !companySlug) {
-    throw new Error("Products must be linked to a category and partner company.");
-  }
+    if (!categorySlug || !companySlug) {
+      throw new Error("Products must be linked to a category and partner company.");
+    }
 
-  await db.execute({
-    sql: `INSERT INTO products (
-      id, slug, name, category_slug, short_description, description,
-      image_url, youtube_url, company_slug, features, specifications,
-      meta_title, meta_description, meta_keywords, is_featured,
-      is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      slug = excluded.slug,
-      name = excluded.name,
-      category_slug = excluded.category_slug,
-      short_description = excluded.short_description,
-      description = excluded.description,
-      image_url = excluded.image_url,
-      youtube_url = excluded.youtube_url,
-      company_slug = excluded.company_slug,
-      features = excluded.features,
-      specifications = excluded.specifications,
-      meta_title = excluded.meta_title,
-      meta_description = excluded.meta_description,
-      meta_keywords = excluded.meta_keywords,
-      is_featured = excluded.is_featured,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      slug,
-      name,
-      categorySlug,
-      clean(formData.get("shortDescription")),
-      clean(formData.get("description")),
-      imageUrl,
-      clean(formData.get("youtubeUrl")),
-      companySlug,
-      linesToJson(formData.get("features")),
-      specsToJson(formData.get("specifications")),
-      clean(formData.get("metaTitle")),
-      clean(formData.get("metaDescription")),
-      keywordsToText(formData.get("metaKeywords")),
-      formData.get("isFeatured") ? 1 : 0,
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO products (
+        id, slug, name, category_slug, short_description, description,
+        image_url, youtube_url, company_slug, features, specifications,
+        meta_title, meta_description, meta_keywords, is_featured,
+        is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        slug = excluded.slug,
+        name = excluded.name,
+        category_slug = excluded.category_slug,
+        short_description = excluded.short_description,
+        description = excluded.description,
+        image_url = excluded.image_url,
+        youtube_url = excluded.youtube_url,
+        company_slug = excluded.company_slug,
+        features = excluded.features,
+        specifications = excluded.specifications,
+        meta_title = excluded.meta_title,
+        meta_description = excluded.meta_description,
+        meta_keywords = excluded.meta_keywords,
+        is_featured = excluded.is_featured,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        slug,
+        name,
+        categorySlug,
+        clean(formData.get("shortDescription")),
+        clean(formData.get("description")),
+        imageUrl,
+        clean(formData.get("youtubeUrl")),
+        companySlug,
+        linesToJson(formData.get("features")),
+        specsToJson(formData.get("specifications")),
+        clean(formData.get("metaTitle")),
+        clean(formData.get("metaDescription")),
+        keywordsToText(formData.get("metaKeywords")),
+        formData.get("isFeatured") ? 1 : 0,
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidateCmsPaths();
+    revalidatePath(`/products/${slug}`);
+    revalidatePath(`/categories/${categorySlug}`);
+    revalidatePath(`/partner-companies/${companySlug}`);
+    redirectToSaved(formData, "Product saved. Website visibility is updated.");
   });
-
-  revalidateCmsPaths();
-  revalidatePath(`/products/${slug}`);
-  revalidatePath(`/categories/${categorySlug}`);
-  revalidatePath(`/partner-companies/${companySlug}`);
-  redirectToSaved(formData, "Product saved. Website visibility is updated.");
 }
 
 export async function saveAssociatedCompany(formData: FormData) {
-  await requireAdmin();
-  await ensureSchemaUpgrades();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const name = clean(formData.get("name"));
-  const slug = slugify(clean(formData.get("slug")) || name);
-  const uploadedLogo = await saveUpload(formData.get("logoFile"), "companies", slug);
-  const logoUrl = uploadedLogo || clean(formData.get("logoUrl"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    await ensureSchemaUpgrades();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const name = clean(formData.get("name"));
+    const slug = slugify(clean(formData.get("slug")) || name);
+    const uploadedLogo = await saveUpload(formData.get("logoFile"), "companies", slug);
+    const logoUrl = uploadedLogo || clean(formData.get("logoUrl"));
 
-  await db.execute({
-    sql: `INSERT INTO associated_companies (
-      id, slug, name, summary, description, logo_url, website_url,
-      eyebrow, heading, content, faqs, highlights, distributor_status, territory,
-      meta_title, meta_description, meta_keywords,
-      is_featured, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      slug = excluded.slug,
-      name = excluded.name,
-      summary = excluded.summary,
-      description = excluded.description,
-      logo_url = excluded.logo_url,
-      website_url = excluded.website_url,
-      eyebrow = excluded.eyebrow,
-      heading = excluded.heading,
-      content = excluded.content,
-      faqs = excluded.faqs,
-      highlights = excluded.highlights,
-      distributor_status = excluded.distributor_status,
-      territory = excluded.territory,
-      meta_title = excluded.meta_title,
-      meta_description = excluded.meta_description,
-      meta_keywords = excluded.meta_keywords,
-      is_featured = excluded.is_featured,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      slug,
-      name,
-      clean(formData.get("summary")),
-      clean(formData.get("description")),
-      logoUrl,
-      clean(formData.get("websiteUrl")) || null,
-      clean(formData.get("eyebrow")),
-      clean(formData.get("heading")),
-      sanitizeRichText(String(formData.get("content") ?? "")),
-      faqsToJson(formData.get("faqs")),
-      linesToJson(formData.get("highlights")),
-      clean(formData.get("distributorStatus")),
-      clean(formData.get("territory")),
-      clean(formData.get("metaTitle")),
-      clean(formData.get("metaDescription")),
-      keywordsToText(formData.get("metaKeywords")),
-      formData.get("isFeatured") ? 1 : 0,
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO associated_companies (
+        id, slug, name, summary, description, logo_url, website_url,
+        eyebrow, heading, content, faqs, highlights, distributor_status, territory,
+        meta_title, meta_description, meta_keywords,
+        is_featured, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        slug = excluded.slug,
+        name = excluded.name,
+        summary = excluded.summary,
+        description = excluded.description,
+        logo_url = excluded.logo_url,
+        website_url = excluded.website_url,
+        eyebrow = excluded.eyebrow,
+        heading = excluded.heading,
+        content = excluded.content,
+        faqs = excluded.faqs,
+        highlights = excluded.highlights,
+        distributor_status = excluded.distributor_status,
+        territory = excluded.territory,
+        meta_title = excluded.meta_title,
+        meta_description = excluded.meta_description,
+        meta_keywords = excluded.meta_keywords,
+        is_featured = excluded.is_featured,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        slug,
+        name,
+        clean(formData.get("summary")),
+        clean(formData.get("description")),
+        logoUrl,
+        clean(formData.get("websiteUrl")) || null,
+        clean(formData.get("eyebrow")),
+        clean(formData.get("heading")),
+        sanitizeRichText(String(formData.get("content") ?? "")),
+        faqsToJson(formData.get("faqs")),
+        linesToJson(formData.get("highlights")),
+        clean(formData.get("distributorStatus")),
+        clean(formData.get("territory")),
+        clean(formData.get("metaTitle")),
+        clean(formData.get("metaDescription")),
+        keywordsToText(formData.get("metaKeywords")),
+        formData.get("isFeatured") ? 1 : 0,
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidateCmsPaths();
+    revalidatePath(`/partner-companies/${slug}`);
+    redirectToSaved(formData, "Partner company saved. Website visibility is updated.");
   });
-
-  revalidateCmsPaths();
-  revalidatePath(`/partner-companies/${slug}`);
-  redirectToSaved(formData, "Partner company saved. Website visibility is updated.");
 }
 
 export async function saveBlogPost(formData: FormData) {
-  await requireAdmin();
-  await ensureSchemaUpgrades();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const title = clean(formData.get("title"));
-  const slug = slugify(clean(formData.get("slug")) || title);
-  const uploadedImage = await saveUpload(formData.get("coverImageFile"), "blog", slug);
-  const coverImageUrl = uploadedImage || clean(formData.get("coverImageUrl"));
-  const content = sanitizeRichText(String(formData.get("content") ?? ""));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    await ensureSchemaUpgrades();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const title = clean(formData.get("title"));
+    const slug = slugify(clean(formData.get("slug")) || title);
+    const uploadedImage = await saveUpload(formData.get("coverImageFile"), "blog", slug);
+    const coverImageUrl = uploadedImage || clean(formData.get("coverImageUrl"));
+    const content = sanitizeRichText(String(formData.get("content") ?? ""));
 
-  if (!title || !slug) {
-    throw new Error("A blog post needs a title.");
-  }
+    if (!title || !slug) {
+      throw new Error("A blog post needs a title.");
+    }
 
-  const excerpt =
-    clean(formData.get("excerpt")) ||
-    truncateText(htmlToPlainText(content), 200);
+    const excerpt =
+      clean(formData.get("excerpt")) ||
+      truncateText(htmlToPlainText(content), 200);
 
-  await db.execute({
-    sql: `INSERT INTO blog_posts (
-      id, slug, title, excerpt, content, cover_image_url, cover_image_alt,
-      author, category, meta_title, meta_description, meta_keywords,
-      published_at, is_featured, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      slug = excluded.slug,
-      title = excluded.title,
-      excerpt = excluded.excerpt,
-      content = excluded.content,
-      cover_image_url = excluded.cover_image_url,
-      cover_image_alt = excluded.cover_image_alt,
-      author = excluded.author,
-      category = excluded.category,
-      meta_title = excluded.meta_title,
-      meta_description = excluded.meta_description,
-      meta_keywords = excluded.meta_keywords,
-      published_at = excluded.published_at,
-      is_featured = excluded.is_featured,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      slug,
-      title,
-      excerpt,
-      content,
-      coverImageUrl,
-      clean(formData.get("coverImageAlt")) || title,
-      clean(formData.get("author")),
-      clean(formData.get("category")),
-      clean(formData.get("metaTitle")),
-      clean(formData.get("metaDescription")),
-      keywordsToText(formData.get("metaKeywords")),
-      publishedAtValue(formData.get("publishedAt")),
-      formData.get("isFeatured") ? 1 : 0,
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO blog_posts (
+        id, slug, title, excerpt, content, cover_image_url, cover_image_alt,
+        author, category, meta_title, meta_description, meta_keywords,
+        published_at, is_featured, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        slug = excluded.slug,
+        title = excluded.title,
+        excerpt = excluded.excerpt,
+        content = excluded.content,
+        cover_image_url = excluded.cover_image_url,
+        cover_image_alt = excluded.cover_image_alt,
+        author = excluded.author,
+        category = excluded.category,
+        meta_title = excluded.meta_title,
+        meta_description = excluded.meta_description,
+        meta_keywords = excluded.meta_keywords,
+        published_at = excluded.published_at,
+        is_featured = excluded.is_featured,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        slug,
+        title,
+        excerpt,
+        content,
+        coverImageUrl,
+        clean(formData.get("coverImageAlt")) || title,
+        clean(formData.get("author")),
+        clean(formData.get("category")),
+        clean(formData.get("metaTitle")),
+        clean(formData.get("metaDescription")),
+        keywordsToText(formData.get("metaKeywords")),
+        publishedAtValue(formData.get("publishedAt")),
+        formData.get("isFeatured") ? 1 : 0,
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidateCmsPaths();
+    revalidatePath(`/blog/${slug}`);
+    redirectToSaved(formData, "Blog post saved. Website visibility is updated.");
   });
-
-  revalidateCmsPaths();
-  revalidatePath(`/blog/${slug}`);
-  redirectToSaved(formData, "Blog post saved. Website visibility is updated.");
 }
 
 export async function saveTeamMember(formData: FormData) {
-  await requireAdmin();
-  const db = requireDatabase();
-  const id = clean(formData.get("id")) || crypto.randomUUID();
-  const name = clean(formData.get("name"));
-  const uploadedImage = await saveUpload(formData.get("imageFile"), "team", name);
-  const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    const db = requireDatabase();
+    const id = clean(formData.get("id")) || crypto.randomUUID();
+    const name = clean(formData.get("name"));
+    const uploadedImage = await saveUpload(formData.get("imageFile"), "team", name);
+    const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
 
-  await db.execute({
-    sql: `INSERT INTO team_members (
-      id, name, role, bio, image_url, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      role = excluded.role,
-      bio = excluded.bio,
-      image_url = excluded.image_url,
-      is_active = excluded.is_active,
-      sort_order = excluded.sort_order,
-      updated_at = CURRENT_TIMESTAMP`,
-    args: [
-      id,
-      name,
-      clean(formData.get("role")),
-      clean(formData.get("bio")),
-      imageUrl,
-      activeValue(formData),
-      Number(formData.get("sortOrder") ?? 0)
-    ]
+    await db.execute({
+      sql: `INSERT INTO team_members (
+        id, name, role, bio, image_url, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        role = excluded.role,
+        bio = excluded.bio,
+        image_url = excluded.image_url,
+        is_active = excluded.is_active,
+        sort_order = excluded.sort_order,
+        updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        id,
+        name,
+        clean(formData.get("role")),
+        clean(formData.get("bio")),
+        imageUrl,
+        activeValue(formData),
+        Number(formData.get("sortOrder") ?? 0)
+      ]
+    });
+
+    revalidatePath("/about");
+    revalidatePath("/admin");
+    revalidatePath("/admin/team");
+    redirectToSaved(formData, "Team member saved and published.");
   });
-
-  revalidatePath("/about");
-  revalidatePath("/admin");
-  revalidatePath("/admin/team");
-  redirectToSaved(formData, "Team member saved and published.");
 }
 
 export async function archiveRecord(formData: FormData) {
-  await requireAdmin();
-  const db = requireDatabase();
-  const table = clean(formData.get("table"));
-  const id = clean(formData.get("id"));
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    const db = requireDatabase();
+    const table = clean(formData.get("table"));
+    const id = clean(formData.get("id"));
 
-  const allowedTables = new Set([
-    "products",
-    "product_categories",
-    "associated_companies",
-    "team_members",
-    "cms_resources",
-    "blog_posts"
-  ]);
+    const allowedTables = new Set([
+      "products",
+      "product_categories",
+      "associated_companies",
+      "team_members",
+      "cms_resources",
+      "blog_posts"
+    ]);
 
-  if (!allowedTables.has(table)) {
-    throw new Error("Unsupported archive target.");
-  }
+    if (!allowedTables.has(table)) {
+      throw new Error("Unsupported archive target.");
+    }
 
-  await db.execute({
-    sql: `UPDATE ${table} SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    args: [id]
+    await db.execute({
+      sql: `UPDATE ${table} SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      args: [id]
+    });
+
+    revalidateCmsPaths();
+    redirectToSaved(formData, "Item is hidden from the website.");
   });
-
-  revalidateCmsPaths();
-  redirectToSaved(formData, "Item is hidden from the website.");
 }
 
 export async function updateSubmissionStatus(formData: FormData) {
-  await requireAdmin();
-  const db = requireDatabase();
+  return runAdminAction(formData, async () => {
+    await requireAdmin();
+    const db = requireDatabase();
 
-  await db.execute({
-    sql: "UPDATE contact_submissions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    args: [clean(formData.get("status")) || "new", clean(formData.get("id"))]
+    await db.execute({
+      sql: "UPDATE contact_submissions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [clean(formData.get("status")) || "new", clean(formData.get("id"))]
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/inquiries");
+    redirectToSaved(formData, "Inquiry status updated.");
   });
-
-  revalidatePath("/admin");
-  revalidatePath("/admin/inquiries");
-  redirectToSaved(formData, "Inquiry status updated.");
 }
 
 export async function submitInquiry(formData: FormData) {

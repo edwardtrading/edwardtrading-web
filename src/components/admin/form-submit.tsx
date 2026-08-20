@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, Save } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Save, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -83,6 +83,23 @@ export function SavedNotice({ message }: { message?: string }) {
       className="sticky top-24 z-20 mb-6 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-sm"
     >
       <CheckCircle2 aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+/** Shown when a save was rejected, with the reason the action reported. */
+export function ProblemNotice({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div
+      role="alert"
+      className="sticky top-24 z-20 mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900 shadow-sm"
+    >
+      <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
       <span>{message}</span>
     </div>
   );

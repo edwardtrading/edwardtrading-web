@@ -34,7 +34,7 @@ export default function AdminSectionPage({
   searchParams
 }: {
   params: { section: string };
-  searchParams?: { saved?: string; admin_login?: string };
+  searchParams?: { saved?: string; problem?: string; admin_login?: string };
 }) {
   if (!sections.has(params.section as AdminSection)) {
     notFound();
@@ -44,6 +44,7 @@ export default function AdminSectionPage({
     <AdminScreen
       section={params.section as AdminSection}
       savedMessage={searchParams?.saved}
+      problemMessage={searchParams?.problem}
       loginSessionStarted={searchParams?.admin_login === "1"}
     />
   );

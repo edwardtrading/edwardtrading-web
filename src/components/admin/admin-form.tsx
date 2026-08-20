@@ -32,6 +32,7 @@ import {
   updateSubmissionStatus
 } from "@/app/admin/actions";
 import {
+  ProblemNotice,
   SaveButton,
   SavedNotice,
   StickySaveBar
@@ -1154,12 +1155,14 @@ export function AdminWorkspace({
   data,
   disabled,
   section = "overview",
-  savedMessage
+  savedMessage,
+  problemMessage
 }: {
   data: AdminData;
   disabled: boolean;
   section?: AdminSection;
   savedMessage?: string;
+  problemMessage?: string;
 }) {
   const pageGroups = data.pages.reduce<Record<string, CmsPage[]>>((acc, page) => {
     const group = pageLabels[page.slug]?.group || "Other Pages";
@@ -1235,6 +1238,7 @@ export function AdminWorkspace({
       </aside>
 
       <div className="grid gap-6">
+        <ProblemNotice message={problemMessage} />
         <SavedNotice message={savedMessage} />
         {section === "overview" ? (
         <section className={sectionClass}>

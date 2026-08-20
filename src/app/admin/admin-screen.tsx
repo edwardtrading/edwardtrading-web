@@ -14,10 +14,12 @@ const loginInputClass =
 export async function AdminScreen({
   section,
   savedMessage,
+  problemMessage,
   loginSessionStarted = false
 }: {
   section: AdminSection;
   savedMessage?: string;
+  problemMessage?: string;
   loginSessionStarted?: boolean;
 }) {
   const configured = hasDatabaseConfig();
@@ -109,6 +111,7 @@ export async function AdminScreen({
           disabled={!configured}
           section={section}
           savedMessage={savedMessage}
+          problemMessage={problemMessage}
         />
       </div>
     </section>
