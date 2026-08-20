@@ -41,52 +41,6 @@ export const navItems = [
 ];
 
 export const heroImage = "";
-export const cleaningImage = "";
-export const healthcareImage = "";
-export const warehouseImage = "";
-
-export const solutions = [
-  {
-    title: "Cleaning & Hygiene",
-    href: "/cleaning-solutions",
-    description:
-      "Cleaning accessories, hygiene chemicals, facility care products, and practical support for institutional environments.",
-    icon: FlaskConical,
-    image: cleaningImage
-  },
-  {
-    title: "Healthcare Products",
-    href: "/partner-companies",
-    description:
-      "Healthcare products and diagnostic equipment supported through trusted supplier relationships.",
-    icon: Sparkles,
-    image: ""
-  },
-  {
-    title: "Surgical Instruments",
-    href: "/surgical-instruments",
-    description:
-      "Surgical items, clinical supply coordination, and medical product support for hospitals and clinics.",
-    icon: Stethoscope,
-    image: healthcareImage
-  },
-  {
-    title: "Medical Equipment",
-    href: "/solutions",
-    description:
-      "Medical equipment sourcing conversations for healthcare buyers that need reliable product guidance.",
-    icon: PackageCheck,
-    image: warehouseImage
-  },
-  {
-    title: "Hospital Furniture",
-    href: "/solutions",
-    description:
-      "Hospital furniture and related institutional requirements for healthcare facilities.",
-    icon: ShieldCheck,
-    image: ""
-  }
-];
 
 export const industries = [
   { title: "Hospitals & Clinics", icon: HeartPulse },
@@ -180,4 +134,3 @@ export const contactInterests = [
   "General inquiry"
 ];
 
-export type Solution = (typeof solutions)[number];

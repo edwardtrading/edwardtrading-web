@@ -16,6 +16,7 @@ import {
   Package,
   Pencil,
   Sparkles,
+  TriangleAlert,
   Upload,
   UsersRound
 } from "lucide-react";
@@ -177,6 +178,38 @@ function companyName(data: AdminData, slug?: string | null) {
   }
 
   return data.companies.find((company) => company.slug === slug)?.name || slug;
+}
+
+/**
+ * A product only reaches the website if its category and its brand are both
+ * visible. Without this the editor shows "Shown on website" for a product whose
+ * page is actually a 404.
+ */
+function hiddenByParents(data: AdminData, product: ManagedProduct) {
+  const category = data.categories.find(
+    (item) => item.slug === product.categorySlug
+  );
+  const company = data.companies.find(
+    (item) => item.slug === product.companySlug
+  );
+
+  const blockers: string[] = [];
+
+  if (category && !category.isActive) {
+    blockers.push(`the ${category.name} category is hidden`);
+  }
+
+  if (company && !company.isActive) {
+    blockers.push(`the ${company.name} brand is hidden`);
+  }
+
+  return blockers;
+}
+
+function activeProductsInCategory(data: AdminData, slug: string) {
+  return data.products.filter(
+    (product) => product.categorySlug === slug && product.isActive
+  ).length;
 }
 
 function productCountForCompany(data: AdminData, slug: string) {
@@ -525,12 +558,14 @@ function EditSummary({
   eyebrow,
   title,
   meta,
-  active
+  active,
+  warning
 }: {
   eyebrow: string;
   title: string;
   meta?: string;
   active?: boolean;
+  warning?: string;
 }) {
   return (
     <summary className="cursor-pointer list-none">
@@ -548,6 +583,12 @@ function EditSummary({
             </h3>
             {meta ? (
               <p className="mt-1 text-xs font-bold text-slate">{meta}</p>
+            ) : null}
+            {warning ? (
+              <p className="mt-2 inline-flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">
+                <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {warning}
+              </p>
             ) : null}
           </div>
         </div>
@@ -629,9 +670,36 @@ function ProductForm({
   disabled: boolean;
 }) {
   const firstCategory = categories[0]?.slug ?? "";
+  const chosenCategory = categories.find(
+    (item) => item.slug === product?.categorySlug
+  );
+  const chosenCompany = companies.find(
+    (item) => item.slug === product?.companySlug
+  );
+  const blockers = [
+    chosenCategory && !chosenCategory.isActive
+      ? `the ${chosenCategory.name} category`
+      : null,
+    chosenCompany && !chosenCompany.isActive
+      ? `the ${chosenCompany.name} brand`
+      : null
+  ].filter(Boolean);
 
   return (
     <form action={saveProduct} className="grid gap-5 md:grid-cols-2">
+      {product && blockers.length > 0 ? (
+        <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900 md:col-span-2">
+          <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong className="font-bold">This product is not on the website.</strong>{" "}
+            A product only appears when its category and its brand are both
+            visible, and {blockers.join(" and ")}{" "}
+            {blockers.length > 1 ? "are" : "is"} hidden. Turn{" "}
+            {blockers.length > 1 ? "them" : "it"} back on, or move this product to
+            a visible category or brand.
+          </span>
+        </div>
+      ) : null}
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={product?.id ?? ""} />
       <Field label="Product name" name="name" defaultValue={product?.name} required disabled={disabled} />
@@ -656,6 +724,7 @@ function ProductForm({
           {categories.map((category) => (
             <option key={category.slug} value={category.slug}>
               {category.name}
+              {category.isActive ? "" : " (hidden from website)"}
             </option>
           ))}
         </select>
@@ -675,6 +744,7 @@ function ProductForm({
           {companies.map((company) => (
             <option key={company.slug} value={company.slug}>
               {company.name}
+              {company.isActive ? "" : " (hidden from website)"}
             </option>
           ))}
         </select>
@@ -1394,8 +1464,14 @@ export function AdminWorkspace({
                 <EditSummary
                   eyebrow="Product category"
                   title={category.name}
-                  meta={category.slug}
+                  meta={`${activeProductsInCategory(data, category.slug)} products`}
                   active={category.isActive}
+                  warning={
+                    !category.isActive &&
+                    activeProductsInCategory(data, category.slug) > 0
+                      ? `Hiding this category also hides its ${activeProductsInCategory(data, category.slug)} product(s) from the website.`
+                      : undefined
+                  }
                 />
                 <div className="mt-6 border-t border-charcoal/10 pt-6">
                   <CategoryForm category={category} section="solutions" disabled={disabled} />
@@ -1618,8 +1694,14 @@ export function AdminWorkspace({
                 <EditSummary
                   eyebrow="Category"
                   title={category.name}
-                  meta={category.slug}
+                  meta={`${activeProductsInCategory(data, category.slug)} products`}
                   active={category.isActive}
+                  warning={
+                    !category.isActive &&
+                    activeProductsInCategory(data, category.slug) > 0
+                      ? `Hiding this category also hides its ${activeProductsInCategory(data, category.slug)} product(s) from the website.`
+                      : undefined
+                  }
                 />
                 <div className="mt-6 border-t border-charcoal/10 pt-6">
                   <CategoryForm category={category} section="categories" disabled={disabled} />
@@ -1674,6 +1756,11 @@ export function AdminWorkspace({
                     title={product.name}
                     meta={`${categoryName(data, product.categorySlug)} / ${companyName(data, product.companySlug)}`}
                     active={product.isActive}
+                    warning={
+                      product.isActive && hiddenByParents(data, product).length > 0
+                        ? `Not on the website because ${hiddenByParents(data, product).join(" and ")}.`
+                        : undefined
+                    }
                   />
                   <div className="mt-6 border-t border-charcoal/10 pt-6">
                     <ProductForm
