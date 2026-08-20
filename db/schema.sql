@@ -162,3 +162,14 @@ CREATE TABLE IF NOT EXISTS blog_posts (
 
 CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at
 ON blog_posts(published_at DESC);
+
+-- Uploaded images and video. Stored here rather than on disk so uploads work on
+-- hosts with a read-only filesystem; served by the /media/[id] route.
+CREATE TABLE IF NOT EXISTS media_assets (
+  id TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  byte_size INTEGER NOT NULL DEFAULT 0,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

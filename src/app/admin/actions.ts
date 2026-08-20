@@ -6,7 +6,6 @@ import {
   randomBytes,
   timingSafeEqual
 } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -63,9 +62,19 @@ function isControlFlowError(error: unknown) {
   );
 }
 
+/**
+ * A failure whose message is already written for an editor, so it is shown
+ * as-is rather than wrapped in generic wording.
+ */
+class EditorError extends Error {}
+
 /** Turns an exception into something an editor can act on. */
 function describeProblem(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+
+  if (error instanceof EditorError) {
+    return message;
+  }
 
   if (/no such column|no such table/i.test(message)) {
     return "The website content store is still being updated. Wait a moment and try saving again.";
@@ -205,6 +214,16 @@ function publishedAtValue(value: FormDataEntryValue | null) {
     : parsed.toISOString();
 }
 
+const maxUploadBytes = 8 * 1024 * 1024;
+
+/**
+ * Stores an uploaded file and returns the URL the site should use for it.
+ *
+ * Files go into the content store rather than onto disk: most hosting platforms
+ * give the running app a read-only filesystem, so writing into `public/uploads`
+ * succeeds locally and then fails in production. Anything already living under
+ * `/uploads/...` keeps working, since those files ship with the build.
+ */
 async function saveUpload(
   value: FormDataEntryValue | null,
   folder: string,
@@ -214,16 +233,34 @@ async function saveUpload(
     return "";
   }
 
+  if (value.size > maxUploadBytes) {
+    throw new EditorError(
+      `That file is ${(value.size / 1024 / 1024).toFixed(1)}MB. Please choose a file under ${
+        maxUploadBytes / 1024 / 1024
+      }MB, or resize it first.`
+    );
+  }
+
+  await ensureSchemaUpgrades();
+  const db = requireDatabase();
   const extension = path.extname(value.name).toLowerCase() || ".webp";
-  const safeName = slugify(fallbackName) || "asset";
-  const fileName = `${safeName}-${Date.now()}${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", folder);
-  const buffer = Buffer.from(await value.arrayBuffer());
+  const fileName = `${slugify(fallbackName) || folder || "asset"}-${Date.now()}${extension}`;
+  const id = crypto.randomUUID();
 
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, fileName), buffer);
+  await db.execute({
+    sql: `INSERT INTO media_assets (id, file_name, mime_type, byte_size, data)
+      VALUES (?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      fileName,
+      value.type || "application/octet-stream",
+      value.size,
+      new Uint8Array(await value.arrayBuffer())
+    ]
+  });
 
-  return `/uploads/${folder}/${fileName}`;
+  // The id is unique per upload, so the URL can be cached indefinitely.
+  return `/media/${id}`;
 }
 
 function requireDatabase() {
@@ -504,7 +541,7 @@ export async function saveAdminUser(formData: FormData) {
     const password = clean(formData.get("password"));
 
     if (!email || !password) {
-      throw new Error("Email and password are required.");
+      throw new EditorError("Enter both an email address and a password.");
     }
 
     await db.execute({
@@ -691,7 +728,9 @@ export async function saveProduct(formData: FormData) {
     const imageUrl = uploadedImage || clean(formData.get("imageUrl"));
 
     if (!categorySlug || !companySlug) {
-      throw new Error("Products must be linked to a category and partner company.");
+      throw new EditorError(
+        "Choose both a category and a brand before saving this product."
+      );
     }
 
     await db.execute({
@@ -830,7 +869,7 @@ export async function saveBlogPost(formData: FormData) {
     const content = sanitizeRichText(String(formData.get("content") ?? ""));
 
     if (!title || !slug) {
-      throw new Error("A blog post needs a title.");
+      throw new EditorError("Give the article a title before saving.");
     }
 
     const excerpt =

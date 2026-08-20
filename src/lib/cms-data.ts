@@ -650,6 +650,14 @@ const schemaUpgradeStatements = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS media_assets (
+    id TEXT PRIMARY KEY,
+    file_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    byte_size INTEGER NOT NULL DEFAULT 0,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   "ALTER TABLE products ADD COLUMN meta_title TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE products ADD COLUMN meta_description TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE products ADD COLUMN meta_keywords TEXT NOT NULL DEFAULT ''",

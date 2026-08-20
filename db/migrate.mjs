@@ -59,7 +59,15 @@ const createStatements = [
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at
-    ON blog_posts(published_at DESC)`
+    ON blog_posts(published_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS media_assets (
+    id TEXT PRIMARY KEY,
+    file_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    byte_size INTEGER NOT NULL DEFAULT 0,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`
 ];
 
 // [table, column, definition] — applied with ALTER TABLE, ignoring duplicates.
