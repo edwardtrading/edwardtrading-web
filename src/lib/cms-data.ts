@@ -233,7 +233,7 @@ export const defaultPages: CmsPage[] = [
     eyebrow: "Partner Companies",
     title: "Partner companies and supplier relationships.",
     description:
-      "This directory can be managed from the CMS as Edward Trading Pvt. Ltd. adds or updates partner company relationships.",
+      "Edward Trading Pvt. Ltd. distributes and supplies products from the brands below to hospitals, hotels, and facility teams across Nepal. Each brand has its own page with the range we carry and how to request pricing.",
     imageUrl: "",
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",

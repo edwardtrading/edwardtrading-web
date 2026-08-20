@@ -90,7 +90,7 @@ export async function Footer() {
 
       <div className="border-t border-white/10 py-5">
         <div className="container-page flex flex-col gap-2 text-xs text-white/48 md:flex-row md:items-center md:justify-between">
-          <p>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} {site.name} All rights reserved.</p>
           <p>
             Designed & Developed by{" "}
             <Link
@@ -99,7 +99,7 @@ export async function Footer() {
               rel="noreferrer"
               className="text-primary-light transition hover:text-white"
             >
-              InfoBytes Nepal.
+              Infobytes Nepal Pvt. Ltd.
             </Link>
           </p>
         </div>

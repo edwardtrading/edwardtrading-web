@@ -1,8 +1,10 @@
 import {
+  ArrowRight,
   CheckCircle2,
   CirclePlus,
   Database,
   Eye,
+  ExternalLink,
   EyeOff,
   FileText,
   Globe2,
@@ -29,7 +31,21 @@ import {
   saveTeamMember,
   updateSubmissionStatus
 } from "@/app/admin/actions";
-import { SaveButton, SavedNotice } from "@/components/admin/form-submit";
+import {
+  SaveButton,
+  SavedNotice,
+  StickySaveBar
+} from "@/components/admin/form-submit";
+import {
+  ConfirmSubmit,
+  FaqField,
+  ImageField,
+  LineListField,
+  ListFilter,
+  PairListField,
+  SearchAppearanceFields,
+  SlugField
+} from "@/components/admin/admin-fields";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import type {
   CmsPage,
@@ -41,7 +57,9 @@ import type {
   ManagedProduct,
   ManagedTeamMember
 } from "@/lib/cms-data";
-import { distributorKeywordVariants, keywordsToText } from "@/lib/seo";
+import { distributorKeywordVariants, resolveCompanyPresentation } from "@/lib/seo";
+import { site } from "@/lib/site-data";
+import { formatPublishedDate } from "@/lib/utils";
 
 type AdminData = {
   categories: ManagedCategory[];
@@ -118,6 +136,7 @@ const inputClass =
 const textareaClass =
   "w-full rounded-md border border-charcoal/12 bg-light-gray px-3 py-3 text-sm outline-none transition focus:border-primary focus:bg-white disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "grid gap-2 text-sm font-semibold text-charcoal";
+const helpClass = "text-xs font-normal leading-6 text-slate";
 const panelClass = "rounded-lg border border-charcoal/10 bg-white p-5 shadow-sm md:p-6";
 const sectionClass = "scroll-mt-28 rounded-lg border border-charcoal/10 bg-white p-5 shadow-sm md:p-7";
 
@@ -147,6 +166,43 @@ function getPage(data: AdminData, slug: string) {
   return data.pages.find((page) => page.slug === slug);
 }
 
+function categoryName(data: AdminData, slug: string) {
+  return data.categories.find((category) => category.slug === slug)?.name || slug;
+}
+
+function companyName(data: AdminData, slug?: string | null) {
+  if (!slug) {
+    return "No brand";
+  }
+
+  return data.companies.find((company) => company.slug === slug)?.name || slug;
+}
+
+function productCountForCompany(data: AdminData, slug: string) {
+  return data.products.filter((product) => product.companySlug === slug).length;
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-charcoal/20 bg-light-gray p-6 text-center text-sm leading-7 text-slate">
+      {message}
+    </div>
+  );
+}
+
+/** Where a page record actually shows up on the public site. */
+function publicPathForPage(slug: string) {
+  if (slug.startsWith("home-")) {
+    return "/";
+  }
+
+  if (slug === "global-cta") {
+    return "/contact";
+  }
+
+  return `/${slug}`;
+}
+
 function specsToLines(specs: Record<string, string>) {
   return Object.entries(specs)
     .map(([key, value]) => `${key}: ${value}`)
@@ -164,7 +220,8 @@ function Field({
   type = "text",
   required,
   disabled,
-  placeholder
+  placeholder,
+  help
 }: {
   label: string;
   name: string;
@@ -173,6 +230,7 @@ function Field({
   required?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  help?: string;
 }) {
   return (
     <label className={labelClass}>
@@ -186,6 +244,7 @@ function Field({
         placeholder={placeholder}
         className={inputClass}
       />
+      {help ? <span className={helpClass}>{help}</span> : null}
     </label>
   );
 }
@@ -197,7 +256,8 @@ function TextArea({
   rows = 4,
   required,
   disabled,
-  placeholder
+  placeholder,
+  help
 }: {
   label: string;
   name: string;
@@ -206,6 +266,7 @@ function TextArea({
   required?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  help?: string;
 }) {
   return (
     <label className={`${labelClass} md:col-span-2`}>
@@ -219,6 +280,7 @@ function TextArea({
         placeholder={placeholder}
         className={textareaClass}
       />
+      {help ? <span className={helpClass}>{help}</span> : null}
     </label>
   );
 }
@@ -278,67 +340,55 @@ function Toggle({
   );
 }
 
-function faqsToLines(faqs: { question: string; answer: string }[] | undefined) {
-  return (faqs ?? [])
-    .map((faq) => `Q: ${faq.question}\nA: ${faq.answer}`)
-    .join("\n\n");
-}
-
 /**
  * Search settings shared by products, categories, partner companies, pages, and
- * blog posts. Leaving a field blank keeps the automatic fallback, which is why
- * every input shows the value the page would use on its own.
+ * blog posts. Wraps the interactive Google preview and the keyword list so every
+ * editor sees the same layout, and so blank fields keep their automatic value.
  */
 function SeoFieldset({
   metaTitle,
   metaDescription,
   metaKeywords,
   disabled,
-  titlePlaceholder,
-  descriptionPlaceholder,
-  keywordsPlaceholder,
-  note
+  fallbackTitle,
+  fallbackDescription,
+  path,
+  keywordHelp,
+  keywordPlaceholder
 }: {
   metaTitle?: string;
   metaDescription?: string;
   metaKeywords?: string[];
   disabled: boolean;
-  titlePlaceholder?: string;
-  descriptionPlaceholder?: string;
-  keywordsPlaceholder?: string;
-  note?: string;
+  fallbackTitle: string;
+  fallbackDescription: string;
+  path: string;
+  keywordHelp?: string;
+  keywordPlaceholder?: string;
 }) {
   return (
-    <div className="grid gap-5 rounded-md border border-charcoal/10 bg-light-gray/60 p-4 md:col-span-2 md:grid-cols-2">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary md:col-span-2">
-        Search engine settings
-      </p>
-      <Field
-        label="Meta title"
-        name="metaTitle"
-        defaultValue={metaTitle}
+    <div className="grid gap-5 md:col-span-2">
+      <SearchAppearanceFields
+        metaTitle={metaTitle}
+        metaDescription={metaDescription}
+        fallbackTitle={fallbackTitle}
+        fallbackDescription={fallbackDescription}
+        path={path}
+        siteUrl={site.url}
         disabled={disabled}
-        placeholder={titlePlaceholder ?? "Shown as the Google result title (about 60 characters)"}
       />
-      <Field
-        label="Meta description"
-        name="metaDescription"
-        defaultValue={metaDescription}
-        disabled={disabled}
-        placeholder={descriptionPlaceholder ?? "Shown under the title in Google (about 155 characters)"}
-      />
-      <TextArea
-        label="Target keywords"
+      <LineListField
+        label="Search words customers type"
         name="metaKeywords"
-        defaultValue={keywordsToText(metaKeywords)}
-        rows={4}
+        defaultValue={metaKeywords ?? []}
         disabled={disabled}
-        placeholder={keywordsPlaceholder ?? "One keyword per line"}
+        placeholder={keywordPlaceholder ?? "for example: floor scrubber Nepal"}
+        addLabel="Add search words"
+        help={
+          keywordHelp ??
+          "Optional. Add the phrases people would type into Google to find this page."
+        }
       />
-      <p className="text-xs font-normal leading-6 text-slate md:col-span-2">
-        {note ??
-          "Leave a field blank to use the automatic value built from the content above."}
-      </p>
     </div>
   );
 }
@@ -366,27 +416,42 @@ function ArchiveButton({
   table,
   id,
   returnTo,
-  disabled
+  disabled,
+  noun = "item"
 }: {
   table: string;
   id: string;
   returnTo: string;
   disabled?: boolean;
+  noun?: string;
 }) {
   return (
     <form action={archiveRecord}>
       <input type="hidden" name="returnTo" value={returnTo} />
       <input type="hidden" name="table" value={table} />
       <input type="hidden" name="id" value={id} />
-      <button
-        type="submit"
+      <ConfirmSubmit
+        label="Hide from website"
+        question={`Hide this ${noun} from the website?`}
+        confirmLabel="Yes, hide it"
         disabled={disabled}
-        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <EyeOff aria-hidden className="h-4 w-4" />
-        Hide from website
-      </button>
+      />
     </form>
+  );
+}
+
+/** Opens the live page an entry produces, so editors can check their work. */
+function ViewOnSite({ path, label = "View on website" }: { path: string; label?: string }) {
+  return (
+    <a
+      href={path}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-charcoal/12 bg-white px-3 text-xs font-bold text-charcoal transition hover:border-primary hover:text-primary"
+    >
+      <ExternalLink aria-hidden className="h-4 w-4" />
+      {label}
+    </a>
   );
 }
 
@@ -511,13 +576,21 @@ function CategoryForm({
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={category?.id ?? ""} />
       <Field label="Category name" name="name" defaultValue={category?.name} required disabled={disabled} />
-      <Field label="Slug" name="slug" defaultValue={category?.slug} disabled={disabled} placeholder="auto-generated if blank" />
+      <SlugField
+        defaultValue={category?.slug}
+        sourceName="name"
+        basePath="/categories"
+        disabled={disabled}
+      />
+      <ImageField
+        label="Category image"
+        urlName="imageUrl"
+        fileName="imageFile"
+        defaultUrl={category?.imageUrl}
+        disabled={disabled}
+      />
       <div className="md:col-span-2">
-        <Field label="Image path or URL" name="imageUrl" type="text" defaultValue={category?.imageUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
-      </div>
-      <FileField label="Upload category image" name="imageFile" disabled={disabled} />
-      <div className="md:col-span-2">
-        <Field label="Short summary" name="summary" defaultValue={category?.summary} required disabled={disabled} />
+        <Field label="Short summary" name="summary" defaultValue={category?.summary} required disabled={disabled} placeholder="One line shown on the category card" />
       </div>
       <TextArea label="Description" name="description" defaultValue={category?.description} required disabled={disabled} />
       <SeoFieldset
@@ -525,16 +598,17 @@ function CategoryForm({
         metaDescription={category?.metaDescription}
         metaKeywords={category?.metaKeywords}
         disabled={disabled}
-        titlePlaceholder={category ? `Defaults to: ${category.name}` : "Defaults to the category name"}
-        descriptionPlaceholder="Defaults to the short summary"
+        fallbackTitle={category?.name || "Category name"}
+        fallbackDescription={category?.summary || "The short summary above"}
+        path={`/categories/${category?.slug ?? ""}`}
       />
-      <Field label="Sort order" name="sortOrder" type="number" defaultValue={category?.sortOrder ?? 0} disabled={disabled} />
+      <Field label="Display order" name="sortOrder" type="number" defaultValue={category?.sortOrder ?? 0} disabled={disabled} placeholder="Lower numbers appear first" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Toggle name="isFeatured" label="Feature on website" defaultChecked={category?.isFeatured ?? true} disabled={disabled} />
-        <Toggle name="isActive" label="Show on website" defaultChecked={category?.isActive ?? true} disabled={disabled} />
+        <Toggle name="isFeatured" label="Highlight on the homepage" defaultChecked={category?.isFeatured ?? true} disabled={disabled} />
+        <Toggle name="isActive" label="Visible on the website" defaultChecked={category?.isActive ?? true} disabled={disabled} />
       </div>
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={category ? "Save category" : "Create category"} />
+        <StickySaveBar disabled={disabled} label={category ? "Save category" : "Create category"} />
       </div>
     </form>
   );
@@ -560,7 +634,12 @@ function ProductForm({
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={product?.id ?? ""} />
       <Field label="Product name" name="name" defaultValue={product?.name} required disabled={disabled} />
-      <Field label="Slug" name="slug" defaultValue={product?.slug} disabled={disabled} placeholder="auto-generated if blank" />
+      <SlugField
+        defaultValue={product?.slug}
+        sourceName="name"
+        basePath="/products"
+        disabled={disabled}
+      />
       <label className={labelClass}>
         Category
         <select
@@ -599,37 +678,57 @@ function ProductForm({
           ))}
         </select>
       </label>
+      <ImageField
+        label="Product image"
+        urlName="imageUrl"
+        fileName="imageFile"
+        defaultUrl={product?.imageUrl}
+        disabled={disabled}
+      />
       <div className="md:col-span-2">
-        <Field label="Image path or URL" name="imageUrl" type="text" defaultValue={product?.imageUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
+        <Field label="YouTube video link" name="youtubeUrl" type="url" defaultValue={product?.youtubeUrl} disabled={disabled} placeholder="Optional. Paste a YouTube link to show a video on the product page" />
       </div>
       <div className="md:col-span-2">
-        <Field label="YouTube video URL" name="youtubeUrl" type="url" defaultValue={product?.youtubeUrl} disabled={disabled} placeholder="Optional product video link" />
-      </div>
-      <FileField label="Upload product image" name="imageFile" disabled={disabled} />
-      <div className="md:col-span-2">
-        <Field label="Short description" name="shortDescription" defaultValue={product?.shortDescription} required disabled={disabled} />
+        <Field label="Short description" name="shortDescription" defaultValue={product?.shortDescription} required disabled={disabled} placeholder="One line shown on the product card" />
       </div>
       <TextArea label="Full description" name="description" defaultValue={product?.description} required disabled={disabled} />
-      <TextArea label="Features" name="features" defaultValue={product?.features.join("\n")} rows={5} disabled={disabled} placeholder="One feature per line" />
-      <TextArea label="Specifications" name="specifications" defaultValue={product ? specsToLines(product.specifications) : ""} rows={5} disabled={disabled} placeholder="Category: Cleaning chemical" />
+      <LineListField
+        label="Key features"
+        name="features"
+        defaultValue={product?.features ?? []}
+        disabled={disabled}
+        placeholder="for example: Suitable for daily cleaning programs"
+        addLabel="Add feature"
+        help="Shown as a checklist on the product page."
+      />
+      <PairListField
+        label="Specifications"
+        name="specifications"
+        defaultValue={Object.entries(product?.specifications ?? {}).map(
+          ([key, value]) => ({ key, value })
+        )}
+        disabled={disabled}
+        keyPlaceholder="for example: Availability"
+        valuePlaceholder="for example: On request"
+        help="Shown as a specifications table on the product page."
+      />
       <SeoFieldset
         metaTitle={product?.metaTitle}
         metaDescription={product?.metaDescription}
         metaKeywords={product?.metaKeywords}
         disabled={disabled}
-        titlePlaceholder={product ? `Defaults to: ${product.name}` : "Defaults to the product name"}
-        descriptionPlaceholder="Defaults to the short description"
-        keywordsPlaceholder={`One keyword per line, for example:
-Taski Ergodisc 165 price in Nepal
-floor scrubber Nepal`}
+        fallbackTitle={product?.name || "Product name"}
+        fallbackDescription={product?.shortDescription || "The short description above"}
+        path={`/products/${product?.slug ?? ""}`}
+        keywordPlaceholder="for example: Taski Ergodisc 165 price in Nepal"
       />
-      <Field label="Sort order" name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} disabled={disabled} />
+      <Field label="Display order" name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} disabled={disabled} placeholder="Lower numbers appear first" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Toggle name="isFeatured" label="Feature on website" defaultChecked={product?.isFeatured ?? false} disabled={disabled} />
-        <Toggle name="isActive" label="Show on website" defaultChecked={product?.isActive ?? true} disabled={disabled} />
+        <Toggle name="isFeatured" label="Highlight on the homepage" defaultChecked={product?.isFeatured ?? false} disabled={disabled} />
+        <Toggle name="isActive" label="Visible on the website" defaultChecked={product?.isActive ?? true} disabled={disabled} />
       </div>
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={product ? "Save product" : "Create product"} />
+        <StickySaveBar disabled={disabled} label={product ? "Save product" : "Create product"} />
       </div>
     </form>
   );
@@ -644,95 +743,125 @@ function CompanyForm({
   section: AdminSection;
   disabled: boolean;
 }) {
+  // Mirrors the public page so the placeholders show the real automatic wording.
+  const presentation = resolveCompanyPresentation(
+    company ?? {
+      id: "",
+      slug: "",
+      name: "Brand",
+      summary: "",
+      description: "",
+      logoUrl: "",
+      isFeatured: false
+    }
+  );
+  const autoKeywords = distributorKeywordVariants(
+    company?.name || "Brand",
+    company?.territory || "Nepal"
+  );
+
   return (
     <form action={saveAssociatedCompany} className="grid gap-5 md:grid-cols-2">
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={company?.id ?? ""} />
-      <Field label="Partner company name" name="name" defaultValue={company?.name} required disabled={disabled} />
-      <Field label="Slug" name="slug" defaultValue={company?.slug} disabled={disabled} placeholder="auto-generated if blank" />
+      <Field label="Brand name" name="name" defaultValue={company?.name} required disabled={disabled} placeholder="for example: Diversey" />
+      <SlugField
+        defaultValue={company?.slug}
+        sourceName="name"
+        basePath="/partner-companies"
+        disabled={disabled}
+      />
+      <ImageField
+        label="Brand logo"
+        urlName="logoUrl"
+        fileName="logoFile"
+        defaultUrl={company?.logoUrl}
+        disabled={disabled}
+        help="Shown on the partner companies page and at the top of this brand's page."
+      />
       <div className="md:col-span-2">
-        <Field label="Logo URL" name="logoUrl" type="text" defaultValue={company?.logoUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
+        <Field label="Short summary" name="summary" defaultValue={company?.summary ?? ""} disabled={disabled} placeholder="One line shown on the brand card" />
       </div>
-      <FileField label="Upload logo" name="logoFile" disabled={disabled} />
-      <div className="md:col-span-2">
-        <Field label="Short summary" name="summary" defaultValue={company?.summary ?? ""} disabled={disabled} />
-      </div>
-      <TextArea label="Description" name="description" defaultValue={company?.description ?? ""} disabled={disabled} />
-      <Field label="Website URL" name="websiteUrl" type="url" defaultValue={company?.websiteUrl ?? ""} disabled={disabled} />
+      <TextArea label="Description" name="description" defaultValue={company?.description ?? ""} disabled={disabled} help="The opening paragraph on this brand's page." />
+      <Field label="Brand's own website" name="websiteUrl" type="url" defaultValue={company?.websiteUrl ?? ""} disabled={disabled} placeholder="Optional. https://..." />
 
       <div className="grid gap-5 rounded-md border border-charcoal/10 bg-light-gray/60 p-4 md:col-span-2 md:grid-cols-2">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary md:col-span-2">
-          Distributor positioning
-        </p>
+        <div className="md:col-span-2">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+            How you are described for this brand
+          </p>
+          <p className="mt-2 text-xs font-normal leading-6 text-slate">
+            These two boxes shape the page heading, the wording customers read,
+            and the search phrases this page can be found by. Leave them blank
+            and the page reads &quot;{company?.name || "Brand"} Distributor in Nepal&quot;.
+          </p>
+        </div>
+        <label className={labelClass}>
+          Your role for this brand
+          <select
+            name="distributorStatus"
+            defaultValue={company?.distributorStatus ?? ""}
+            disabled={disabled}
+            className={inputClass}
+          >
+            <option value="">Distributor</option>
+            <option value="Authorized Distributor">Authorized Distributor</option>
+            <option value="Sole Distributor">Sole Distributor</option>
+            <option value="Official Distributor">Official Distributor</option>
+            <option value="Dealer">Dealer</option>
+            <option value="Supplier">Supplier</option>
+          </select>
+          <span className="text-xs font-normal leading-6 text-slate">
+            Only choose &quot;Authorized&quot; or &quot;Sole&quot; if Edward Trading
+            actually holds that appointment for this brand.
+          </span>
+        </label>
         <Field
-          label="Distributor status"
-          name="distributorStatus"
-          defaultValue={company?.distributorStatus ?? ""}
-          disabled={disabled}
-          placeholder="Authorized Distributor"
-        />
-        <Field
-          label="Territory"
+          label="Area you cover"
           name="territory"
           defaultValue={company?.territory ?? ""}
           disabled={disabled}
           placeholder="Nepal"
         />
         <Field
-          label="Eyebrow (small label above the heading)"
+          label="Small label above the heading"
           name="eyebrow"
           defaultValue={company?.eyebrow ?? ""}
           disabled={disabled}
-          placeholder="Authorized Distributor in Nepal"
+          placeholder={presentation.eyebrow}
         />
         <Field
-          label="Page heading (H1)"
+          label="Main page heading"
           name="heading"
           defaultValue={company?.heading ?? ""}
           disabled={disabled}
-          placeholder={
-            company?.name
-              ? `${company.name} Distributor in Nepal`
-              : "Brand Distributor in Nepal"
-          }
+          placeholder={presentation.heading}
         />
-        <TextArea
+        <LineListField
           label="Key points"
           name="highlights"
-          defaultValue={(company?.highlights ?? []).join("\n")}
-          rows={5}
+          defaultValue={company?.highlights ?? []}
           disabled={disabled}
-          placeholder={`One point per line, for example:
-Nationwide supply across Nepal
-Genuine products with warranty support`}
+          placeholder="for example: Nationwide supply across Nepal"
+          addLabel="Add key point"
+          help="Shown as a row of highlight cards near the top of the page."
         />
-        <p className="text-xs font-normal leading-6 text-slate md:col-span-2">
-          Distributor status and territory are combined into the page copy, the
-          structured data, and the automatic keyword list, so filling them in is
-          what makes searches like &quot;Authorized {company?.name || "Brand"} Distributor in Nepal&quot;
-          match this page.
-        </p>
       </div>
 
       <RichTextEditor
-        label="Company page content"
+        label="Page content"
         name="content"
         defaultValue={company?.content ?? ""}
         disabled={disabled}
-        helpText="Long-form content for the company page. Use Heading 2 for sections such as product ranges, service coverage, and support. This is the text search engines read to rank the page."
+        helpText="The main text on this brand's page. Use Heading 2 for sections such as product ranges, who you supply, and delivery. This is the text Google reads when deciding what this page is about."
       />
 
-      <TextArea
-        label="Frequently asked questions"
+      <FaqField
+        label="Common questions"
         name="faqs"
-        defaultValue={faqsToLines(company?.faqs)}
-        rows={8}
+        defaultValue={company?.faqs ?? []}
         disabled={disabled}
-        placeholder={`Q: Who is the authorized Diversey distributor in Nepal?
-A: Edward Trading Pvt. Ltd. supplies Diversey products across Nepal.
-
-Q: Do you deliver outside Kathmandu?
-A: Yes, nationwide delivery is available.`}
+        help="These appear as an expandable list on the page and can show directly in Google results."
       />
 
       <SeoFieldset
@@ -740,32 +869,22 @@ A: Yes, nationwide delivery is available.`}
         metaDescription={company?.metaDescription}
         metaKeywords={company?.metaKeywords}
         disabled={disabled}
-        titlePlaceholder={
-          company?.name
-            ? `Defaults to: ${company.name} Distributor in Nepal`
-            : "Defaults to the brand name and territory"
-        }
-        descriptionPlaceholder="Defaults to the summary or description above"
-        keywordsPlaceholder={
-          company?.name
-            ? `Extra keywords, one per line. Already covered automatically:\n${distributorKeywordVariants(
-                company.name,
-                company.territory || "Nepal"
-              )
-                .slice(0, 4)
-                .join("\n")}`
-            : "One keyword per line"
-        }
-        note="Distributor search phrases are generated automatically from the brand name and territory. Anything added here is included on top of them."
+        fallbackTitle={presentation.fallbackTitle}
+        fallbackDescription={presentation.fallbackDescription}
+        path={`/partner-companies/${company?.slug ?? ""}`}
+        keywordPlaceholder={`for example: ${autoKeywords[0] ?? "Diversey distributor in Nepal"}`}
+        keywordHelp={`Optional. These phrases are already covered automatically: ${autoKeywords
+          .slice(0, 4)
+          .join(", ")}.`}
       />
 
-      <Field label="Sort order" name="sortOrder" type="number" defaultValue={company?.sortOrder ?? 0} disabled={disabled} />
+      <Field label="Display order" name="sortOrder" type="number" defaultValue={company?.sortOrder ?? 0} disabled={disabled} placeholder="Lower numbers appear first" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Toggle name="isFeatured" label="Feature on website" defaultChecked={company?.isFeatured ?? false} disabled={disabled} />
-        <Toggle name="isActive" label="Show on website" defaultChecked={company?.isActive ?? true} disabled={disabled} />
+        <Toggle name="isFeatured" label="Highlight on the homepage" defaultChecked={company?.isFeatured ?? false} disabled={disabled} />
+        <Toggle name="isActive" label="Visible on the website" defaultChecked={company?.isActive ?? true} disabled={disabled} />
       </div>
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={company ? "Save partner company" : "Create partner company"} />
+        <StickySaveBar disabled={disabled} label={company ? "Save partner company" : "Create partner company"} />
       </div>
     </form>
   );
@@ -794,7 +913,7 @@ function TeamForm({
       <Field label="Sort order" name="sortOrder" type="number" defaultValue={member?.sortOrder ?? 0} disabled={disabled} />
       <Toggle name="isActive" label="Show on website" defaultChecked={member?.isActive ?? true} disabled={disabled} />
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={member ? "Save team member" : "Create team member"} />
+        <StickySaveBar disabled={disabled} label={member ? "Save team member" : "Create team member"} />
       </div>
     </form>
   );
@@ -819,15 +938,24 @@ function BlogForm({
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={post?.id ?? ""} />
       <Field label="Post title" name="title" defaultValue={post?.title} required disabled={disabled} />
-      <Field label="Slug" name="slug" defaultValue={post?.slug} disabled={disabled} placeholder="auto-generated if blank" />
+      <SlugField
+        defaultValue={post?.slug}
+        sourceName="title"
+        basePath="/blog"
+        disabled={disabled}
+      />
       <Field label="Author" name="author" defaultValue={post?.author ?? ""} disabled={disabled} placeholder="Edward Trading Team" />
-      <Field label="Category" name="category" defaultValue={post?.category ?? ""} disabled={disabled} placeholder="Hygiene, Healthcare, Facility Care" />
+      <Field label="Topic" name="category" defaultValue={post?.category ?? ""} disabled={disabled} placeholder="for example: Hygiene" help="A short label shown above the title." />
+      <ImageField
+        label="Cover image"
+        urlName="coverImageUrl"
+        fileName="coverImageFile"
+        defaultUrl={post?.coverImageUrl}
+        disabled={disabled}
+        help="Shown on the article card and when the post is shared."
+      />
       <div className="md:col-span-2">
-        <Field label="Cover image path or URL" name="coverImageUrl" type="text" defaultValue={post?.coverImageUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
-      </div>
-      <FileField label="Upload cover image" name="coverImageFile" disabled={disabled} />
-      <div className="md:col-span-2">
-        <Field label="Cover image alt text" name="coverImageAlt" defaultValue={post?.coverImageAlt ?? ""} disabled={disabled} placeholder="Describes the image for search engines and screen readers" />
+        <Field label="Cover image description" name="coverImageAlt" defaultValue={post?.coverImageAlt ?? ""} disabled={disabled} placeholder="Describe what the image shows" help="Read aloud by screen readers and used by Google to understand the image." />
       </div>
       <TextArea
         label="Preview text"
@@ -835,7 +963,8 @@ function BlogForm({
         defaultValue={post?.excerpt ?? ""}
         rows={3}
         disabled={disabled}
-        placeholder="Shown on the blog listing card and in social shares. Left blank, the opening of the article is used."
+        placeholder="A two line summary that makes someone want to read the article"
+        help="Shown on the blog card and when the post is shared. Leave it blank and the opening of the article is used."
       />
 
       <RichTextEditor
@@ -852,18 +981,19 @@ function BlogForm({
         metaDescription={post?.metaDescription}
         metaKeywords={post?.metaKeywords}
         disabled={disabled}
-        titlePlaceholder={post ? `Defaults to: ${post.title}` : "Defaults to the post title"}
-        descriptionPlaceholder="Defaults to the preview text"
+        fallbackTitle={post?.title || "Post title"}
+        fallbackDescription={post?.excerpt || "The preview text above"}
+        path={`/blog/${post?.slug ?? ""}`}
       />
 
       <Field label="Publish date" name="publishedAt" type="datetime-local" defaultValue={publishedAt} disabled={disabled} />
-      <Field label="Sort order" name="sortOrder" type="number" defaultValue={post?.sortOrder ?? 0} disabled={disabled} />
+      <Field label="Display order" name="sortOrder" type="number" defaultValue={post?.sortOrder ?? 0} disabled={disabled} placeholder="Lower numbers appear first" />
       <div className="grid gap-3 sm:grid-cols-2 md:col-span-2">
-        <Toggle name="isFeatured" label="Feature on blog" defaultChecked={post?.isFeatured ?? false} disabled={disabled} />
-        <Toggle name="isActive" label="Show on website" defaultChecked={post?.isActive ?? true} disabled={disabled} />
+        <Toggle name="isFeatured" label="Highlight this article" defaultChecked={post?.isFeatured ?? false} disabled={disabled} />
+        <Toggle name="isActive" label="Visible on the website" defaultChecked={post?.isActive ?? true} disabled={disabled} />
       </div>
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={post ? "Save blog post" : "Publish blog post"} />
+        <StickySaveBar disabled={disabled} label={post ? "Save blog post" : "Publish blog post"} />
       </div>
     </form>
   );
@@ -885,15 +1015,18 @@ function PageForm({
       <div className="rounded-md border border-charcoal/10 bg-light-gray px-3 py-3 text-sm font-semibold text-charcoal">
         Editing: {pageLabels[page.slug]?.label || page.slug}
       </div>
-      <Field label="Eyebrow" name="eyebrow" defaultValue={page.eyebrow} disabled={disabled} />
+      <Field label="Small label above the heading" name="eyebrow" defaultValue={page.eyebrow} disabled={disabled} />
       <div className="md:col-span-2">
-        <Field label="Title" name="title" defaultValue={page.title} required disabled={disabled} />
+        <Field label="Main heading" name="title" defaultValue={page.title} required disabled={disabled} />
       </div>
-      <TextArea label="Description" name="description" defaultValue={page.description} required disabled={disabled} />
-      <div className="md:col-span-2">
-        <Field label="Hero image path or URL" name="imageUrl" type="text" defaultValue={page.imageUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
-      </div>
-      <FileField label="Upload hero image" name="imageFile" disabled={disabled} />
+      <TextArea label="Intro paragraph" name="description" defaultValue={page.description} required disabled={disabled} />
+      <ImageField
+        label="Banner image"
+        urlName="imageUrl"
+        fileName="imageFile"
+        defaultUrl={page.imageUrl}
+        disabled={disabled}
+      />
       {page.slug === "home-hero" ? (
         <>
           <div className="md:col-span-2">
@@ -916,21 +1049,20 @@ function PageForm({
       ) : (
         <input type="hidden" name="videoUrl" value={page.videoUrl} />
       )}
-      <Field label="CTA label" name="ctaLabel" defaultValue={page.ctaLabel} disabled={disabled} />
+      <Field label="Button text" name="ctaLabel" defaultValue={page.ctaLabel} disabled={disabled} help={page.ctaHref ? `This button links to ${page.ctaHref}` : undefined} />
       <input type="hidden" name="ctaHref" value={page.ctaHref} />
-      <Field label="Meta title" name="metaTitle" defaultValue={page.metaTitle} disabled={disabled} />
-      <Field label="Meta description" name="metaDescription" defaultValue={page.metaDescription} disabled={disabled} />
-      <TextArea
-        label="Target keywords"
-        name="metaKeywords"
-        defaultValue={keywordsToText(page.metaKeywords)}
-        rows={4}
+      <SeoFieldset
+        metaTitle={page.metaTitle}
+        metaDescription={page.metaDescription}
+        metaKeywords={page.metaKeywords}
         disabled={disabled}
-        placeholder="One keyword per line"
+        fallbackTitle={page.title}
+        fallbackDescription={page.description}
+        path={publicPathForPage(page.slug)}
       />
-      <Toggle name="isActive" label="Show on website" defaultChecked={page.isActive} disabled={disabled} />
-      <div>
-        <SaveButton disabled={disabled} label="Save page content" />
+      <Toggle name="isActive" label="Visible on the website" defaultChecked={page.isActive} disabled={disabled} />
+      <div className="md:col-span-2">
+        <StickySaveBar disabled={disabled} label="Save page" />
       </div>
     </form>
   );
@@ -949,17 +1081,34 @@ function ResourceForm({
     <form action={saveResource} className="grid gap-5 md:grid-cols-2">
       {hiddenReturnInput(section)}
       <input type="hidden" name="id" value={resource?.id ?? ""} />
-      <Field label="Resource key" name="key" defaultValue={resource?.key} required disabled={disabled} placeholder="group.item.name" />
-      <Field label="Label" name="label" defaultValue={resource?.label} required disabled={disabled} />
-      <Field label="Group" name="groupName" defaultValue={resource?.groupName ?? "site_settings"} required disabled={disabled} />
-      <Field label="Type" name="type" defaultValue={resource?.type ?? "text"} disabled={disabled} placeholder="text, stat, url, phone" />
-      <TextArea label="Value" name="value" defaultValue={resource?.value} rows={3} disabled={disabled} />
-      <FileField label="Upload resource image" name="resourceFile" disabled={disabled} />
-      <TextArea label="Metadata" name="metadata" defaultValue={resource ? metadataToLines(resource.metadata) : ""} rows={3} disabled={disabled} placeholder="mapsUrl: https://..." />
-      <Field label="Sort order" name="sortOrder" type="number" defaultValue={resource?.sortOrder ?? 0} disabled={disabled} />
-      <Toggle name="isActive" label="Show on website" defaultChecked={resource?.isActive ?? true} disabled={disabled} />
       <div className="md:col-span-2">
-        <SaveButton disabled={disabled} label={resource ? "Save resource" : "Create resource"} />
+        <Field label="Name" name="label" defaultValue={resource?.label} required disabled={disabled} help="What this detail is called inside this editor. Customers do not see it." />
+      </div>
+      <TextArea label="Content" name="value" defaultValue={resource?.value} rows={3} disabled={disabled} help="This is the part customers see on the website." />
+      <FileField label="Upload an image instead" name="resourceFile" disabled={disabled} />
+      <Field label="Display order" name="sortOrder" type="number" defaultValue={resource?.sortOrder ?? 0} disabled={disabled} placeholder="Lower numbers appear first" />
+      <Toggle name="isActive" label="Visible on the website" defaultChecked={resource?.isActive ?? true} disabled={disabled} />
+
+      {/* Identity fields decide where the value is used on the site. Editors
+          almost never change them, so they stay collapsed behind a warning. */}
+      <details className="rounded-md border border-charcoal/10 bg-light-gray/60 p-4 md:col-span-2">
+        <summary className="cursor-pointer text-sm font-bold text-charcoal">
+          Advanced placement settings
+        </summary>
+        <p className="mt-3 text-xs font-normal leading-6 text-slate">
+          These decide where on the website this detail appears. Changing them can
+          make it disappear from the page it is used on.
+        </p>
+        <div className="mt-4 grid gap-5 md:grid-cols-2">
+          <Field label="Reference name" name="key" defaultValue={resource?.key} required disabled={disabled} placeholder="site.phone" />
+          <Field label="Section" name="groupName" defaultValue={resource?.groupName ?? "site_settings"} required disabled={disabled} />
+          <Field label="Kind" name="type" defaultValue={resource?.type ?? "text"} disabled={disabled} placeholder="text, stat, url, phone" />
+          <TextArea label="Extra details" name="metadata" defaultValue={resource ? metadataToLines(resource.metadata) : ""} rows={3} disabled={disabled} placeholder="mapsUrl: https://..." />
+        </div>
+      </details>
+
+      <div className="md:col-span-2">
+        <StickySaveBar disabled={disabled} label={resource ? "Save changes" : "Add detail"} />
       </div>
     </form>
   );
@@ -1027,25 +1176,62 @@ export function AdminWorkspace({
   const contactResources = data.resources.filter(
     (resource) => resource.groupName === "site_settings"
   );
+  const newInquiries = data.submissions.filter(
+    (submission) => submission.status === "new"
+  ).length;
+  const sectionCounts: Partial<Record<AdminSection, number>> = {
+    solutions: data.categories.length,
+    "partner-companies": data.companies.length,
+    products: data.products.length,
+    blog: data.blogPosts.length,
+    inquiries: newInquiries
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       <aside className="lg:sticky lg:top-28 lg:self-start">
         <div className="rounded-lg border border-charcoal/10 bg-white p-3 shadow-sm">
-          {adminSections.filter((item) => visibleAdminSections.has(item.section)).map((item) => (
-            <a
-              key={item.section}
-              href={item.href}
-              className={`block rounded-md px-3 py-2 text-sm font-semibold transition hover:bg-primary/10 hover:text-primary ${
-                section === item.section
-                  ? "bg-primary/10 text-primary"
-                  : "text-charcoal/72"
-              }`}
-            >
-              {item.label}
-            </a>
-          ))}
+          {adminSections
+            .filter((item) => visibleAdminSections.has(item.section))
+            .map((item) => {
+              const count = sectionCounts[item.section];
+              const isCurrent = section === item.section;
+
+              return (
+                <a
+                  key={item.section}
+                  href={item.href}
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-semibold transition hover:bg-primary/10 hover:text-primary ${
+                    isCurrent ? "bg-primary/10 text-primary" : "text-charcoal/72"
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {typeof count === "number" ? (
+                    <span
+                      className={`inline-flex min-w-6 justify-center rounded-full px-1.5 py-0.5 text-xs font-bold ${
+                        item.section === "inquiries" && count > 0
+                          ? "bg-primary text-white"
+                          : "bg-charcoal/8 text-charcoal/60"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </a>
+              );
+            })}
         </div>
+
+        <a
+          href="/"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-charcoal/10 bg-white px-3 py-2.5 text-sm font-bold text-charcoal shadow-sm transition hover:border-primary hover:text-primary"
+        >
+          <ExternalLink aria-hidden className="h-4 w-4" />
+          Open website
+        </a>
       </aside>
 
       <div className="grid gap-6">
@@ -1055,26 +1241,59 @@ export function AdminWorkspace({
           <SectionHeader
             id="overview-heading"
             icon={Database}
-            eyebrow="Workspace"
-            title="Website content dashboard"
-            description="Use the tabs on the left like the website navigation. The site structure is fixed by the website; this area edits content, catalog items, visibility, and inquiries."
+            eyebrow="Overview"
+            title="Your website at a glance"
+            description="The tabs on the left match your website's menu. Pick a tab to edit the words, photos, and items that appear on that part of the site."
           />
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              ["Pages", data.pages.length],
-              ["Categories", data.categories.length],
-              ["Products", data.products.length],
-              ["Partner Companies", data.companies.length],
-              ["Blog Posts", data.blogPosts.length],
-              ["Inquiries", data.submissions.length]
-            ].map(([label, count]) => (
-              <div key={label} className="rounded-md bg-light-gray p-5">
+              { label: "Categories", count: data.categories.length, href: "/admin/solutions" },
+              { label: "Products", count: data.products.length, href: "/admin/products" },
+              { label: "Brands", count: data.companies.length, href: "/admin/partner-companies" },
+              { label: "Articles", count: data.blogPosts.length, href: "/admin/blog" },
+              { label: "New enquiries", count: newInquiries, href: "/admin/inquiries" },
+              { label: "Pages", count: data.pages.length, href: "/admin/home" }
+            ].map((tile) => (
+              <a
+                key={tile.label}
+                href={tile.href}
+                className="group rounded-md border border-charcoal/10 bg-light-gray p-5 transition hover:border-primary/40 hover:bg-white hover:shadow-sm"
+              >
                 <p className="font-heading text-3xl font-extrabold text-primary">
-                  {count}
+                  {tile.count}
                 </p>
-                <p className="mt-2 text-sm font-bold text-charcoal">{label}</p>
-              </div>
+                <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-charcoal">
+                  {tile.label}
+                  <ArrowRight
+                    aria-hidden
+                    className="h-4 w-4 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
+                  />
+                </p>
+              </a>
             ))}
+          </div>
+
+          <div className="mt-6 rounded-md border border-charcoal/10 bg-white p-5">
+            <h3 className="font-heading text-lg font-bold text-charcoal">
+              Getting started
+            </h3>
+            <ul className="mt-3 grid gap-2 text-sm leading-7 text-slate">
+              <li>
+                Pick a tab on the left. Each one matches a part of your website.
+              </li>
+              <li>
+                Click any item to open it, make your change, then press the save
+                button at the bottom of the form.
+              </li>
+              <li>
+                Changes appear on the website straight away. Use &quot;View on
+                website&quot; to check.
+              </li>
+              <li>
+                Every editor has a &quot;How this appears in Google&quot; section.
+                Leave it blank and sensible wording is used automatically.
+              </li>
+            </ul>
           </div>
         </section>
         ) : null}
@@ -1084,9 +1303,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="home"
             icon={Home}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Home"
-            description="Edit the homepage sections that already exist in the website skeleton."
+            description="Edit each section of your homepage, from the top banner down to the closing call to action."
           />
           {homePages.length > 0 ? (
             <PageEditorList pages={homePages} section="home" disabled={disabled} />
@@ -1101,9 +1320,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="about"
             icon={UsersRound}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="About"
-            description="Edit About page content and the team members shown on the website."
+            description="Edit your About page and the people shown on it."
           />
           {aboutPage ? (
             <PageEditorList pages={[aboutPage]} section="about" disabled={disabled} />
@@ -1113,8 +1332,8 @@ export function AdminWorkspace({
           <div className="mt-6 grid gap-4">
             <details className={panelClass}>
               <AddSummary
-                title="Create team member"
-                description="Add a person to the About page team section."
+                title="Add a team member"
+                description="Add a person to your About page."
                 icon={UsersRound}
               />
               <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1146,9 +1365,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="solutions"
             icon={Layers3}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Solutions"
-            description="Edit the Solutions page content and manage product categories shown on the public site."
+            description="Edit the Solutions page and the product categories shown on it."
           />
           {solutionsPage ? (
             <PageEditorList pages={[solutionsPage]} section="solutions" disabled={disabled} />
@@ -1158,8 +1377,8 @@ export function AdminWorkspace({
           <div className="mt-6 grid gap-4">
             <details className={panelClass}>
               <AddSummary
-                title="Create category"
-                description="Add a product category that appears on the public Solutions page."
+                title="Add a category"
+                description="Groups your products and gets its own page."
                 icon={Layers3}
               />
               <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1191,9 +1410,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="industries"
             icon={Globe2}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Areas We Serve"
-            description="Edit the public Areas We Serve page content."
+            description="Edit the Areas We Serve page."
           />
           {industriesPage ? (
             <PageEditorList pages={[industriesPage]} section="industries" disabled={disabled} />
@@ -1208,9 +1427,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="partner-companies"
             icon={Sparkles}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Partner Companies"
-            description="Edit the Partner Companies page and manage logos, pages, and website visibility for each partner company."
+            description="Edit the brands page, and give each brand its own page with content and common questions that help it show up in Google."
           />
           {partnerCompaniesPage ? (
             <PageEditorList pages={[partnerCompaniesPage]} section="partner-companies" disabled={disabled} />
@@ -1220,30 +1439,44 @@ export function AdminWorkspace({
           <div className="mt-6 grid gap-4">
             <details className={panelClass}>
               <AddSummary
-                title="Create partner company"
-                description="Add a partner logo, company page copy, and website link."
+                title="Add a brand"
+                description="Logo, page content, common questions, and the search wording for this brand."
                 icon={Sparkles}
               />
               <div className="mt-6 border-t border-charcoal/10 pt-6">
                 <CompanyForm section="partner-companies" disabled={disabled} />
               </div>
             </details>
-            {data.companies.map((company) => (
-              <details key={company.id} className={panelClass}>
-                <EditSummary
-                  eyebrow="Partner company"
-                  title={company.name}
-                  meta={company.slug}
-                  active={company.isActive}
-                />
-                <div className="mt-6 border-t border-charcoal/10 pt-6">
-                  <CompanyForm company={company} section="partner-companies" disabled={disabled} />
-                  <div className="mt-4">
-                    <ArchiveButton table="associated_companies" id={company.id} returnTo="/admin/partner-companies" disabled={disabled} />
-                  </div>
-                </div>
-              </details>
-            ))}
+
+            <div>
+              <ListFilter targetId="partner-list" placeholder="Search brands by name" noun="brands" />
+              <div id="partner-list" className="grid gap-4">
+                {data.companies.length === 0 ? (
+                  <EmptyState message="No brands yet. Use the button above to add your first one." />
+                ) : null}
+                {data.companies.map((company) => (
+                  <details
+                    key={company.id}
+                    data-search={`${company.name} ${company.slug} ${company.territory ?? ""}`}
+                    className={panelClass}
+                  >
+                    <EditSummary
+                      eyebrow={resolveCompanyPresentation(company).eyebrow}
+                      title={company.name}
+                      meta={`${productCountForCompany(data, company.slug)} products`}
+                      active={company.isActive}
+                    />
+                    <div className="mt-6 border-t border-charcoal/10 pt-6">
+                      <CompanyForm company={company} section="partner-companies" disabled={disabled} />
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <ViewOnSite path={`/partner-companies/${company.slug}`} />
+                        <ArchiveButton table="associated_companies" id={company.id} returnTo="/admin/partner-companies" disabled={disabled} noun="brand" />
+                      </div>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
         ) : null}
@@ -1253,9 +1486,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="contact"
             icon={Mail}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Contact"
-            description="Edit the Contact page and the public phone, email, address, and map details."
+            description="Edit the Contact page and your phone number, email, address, and map link."
           />
           {contactPage ? (
             <PageEditorList pages={[contactPage]} section="contact" disabled={disabled} />
@@ -1285,9 +1518,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="pages"
             icon={FileText}
-            eyebrow="CMS Pages"
-            title="Site pages"
-            description="Each public page and homepage section has its own editor, so text, images, buttons, and metadata stay easy to find."
+            eyebrow="Website Pages"
+            title="All pages"
+            description="Every page and homepage section has its own editor for text, images, buttons, and how it appears in Google."
           />
           <div className="grid gap-6">
             {Object.entries(pageGroups).map(([group, pages]) => (
@@ -1323,12 +1556,12 @@ export function AdminWorkspace({
             icon={Layers3}
             eyebrow="Reusable Content"
             title="Contact and reusable content"
-            description="Manage content snippets used by the coded website skeleton. Most contact details are easier to edit from the Contact tab."
+            description="Small pieces of text and numbers reused around the site. Phone, email, and address are easier to edit from the Contact tab."
           />
           <details className={panelClass}>
             <AddSummary
-              title="Create resource"
-              description="Add a setting, reusable label, stat, URL, or image resource."
+              title="Add a reusable detail"
+              description="A number, label, link, or image used in more than one place."
               icon={Layers3}
             />
             <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1361,14 +1594,14 @@ export function AdminWorkspace({
           <SectionHeader
             id="categories"
             icon={Layers3}
-            eyebrow="Catalog"
+            eyebrow="Products"
             title="Categories"
-            description="Create and update product categories. Public category cards and category product pages are generated from these entries."
+            description="Group your products. Each category gets its own page listing everything inside it."
           />
           <details className={panelClass}>
             <AddSummary
-              title="Create category"
-              description="Add a product category that appears on the public site."
+              title="Add a category"
+              description="Groups your products and gets its own page."
               icon={Layers3}
             />
             <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1401,14 +1634,14 @@ export function AdminWorkspace({
           <SectionHeader
             id="products"
             icon={Package}
-            eyebrow="Catalog"
+            eyebrow="Products"
             title="Products"
-            description="Create and update product cards, detail pages, features, specifications, and category placement."
+            description="Add products, edit their photos, features, and specifications, and control which ones appear on the website."
           />
           <details className={panelClass}>
             <AddSummary
-              title="Create product"
-              description="Add a product with category, partner company, features, and video."
+              title="Add a product"
+              description="Set the category, brand, photo, features, and search wording."
               icon={Package}
             />
             <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1420,29 +1653,40 @@ export function AdminWorkspace({
               />
             </div>
           </details>
-          <div className="mt-4 grid gap-4">
-            {data.products.map((product) => (
-              <details key={product.id} className={panelClass}>
-                <EditSummary
-                  eyebrow="Product"
-                  title={product.name}
-                  meta={`${product.categorySlug} / ${product.companySlug || "No partner"}`}
-                  active={product.isActive}
-                />
-                <div className="mt-6 border-t border-charcoal/10 pt-6">
-                  <ProductForm
-                    product={product}
-                    categories={data.categories}
-                    companies={data.companies}
-                    section="products"
-                    disabled={disabled}
+          <div className="mt-6">
+            <ListFilter targetId="product-list" placeholder="Search products by name" noun="products" />
+            <div id="product-list" className="grid gap-4">
+              {data.products.length === 0 ? (
+                <EmptyState message="No products yet. Use the button above to add your first one." />
+              ) : null}
+              {data.products.map((product) => (
+                <details
+                  key={product.id}
+                  data-search={`${product.name} ${product.slug} ${product.categorySlug} ${product.companySlug ?? ""}`}
+                  className={panelClass}
+                >
+                  <EditSummary
+                    eyebrow="Product"
+                    title={product.name}
+                    meta={`${categoryName(data, product.categorySlug)} / ${companyName(data, product.companySlug)}`}
+                    active={product.isActive}
                   />
-                  <div className="mt-4">
-                    <ArchiveButton table="products" id={product.id} returnTo="/admin/products" disabled={disabled} />
+                  <div className="mt-6 border-t border-charcoal/10 pt-6">
+                    <ProductForm
+                      product={product}
+                      categories={data.categories}
+                      companies={data.companies}
+                      section="products"
+                      disabled={disabled}
+                    />
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <ViewOnSite path={`/products/${product.slug}`} />
+                      <ArchiveButton table="products" id={product.id} returnTo="/admin/products" disabled={disabled} noun="product" />
+                    </div>
                   </div>
-                </div>
-              </details>
-            ))}
+                </details>
+              ))}
+            </div>
           </div>
         </section>
         ) : null}
@@ -1454,12 +1698,12 @@ export function AdminWorkspace({
             icon={Sparkles}
             eyebrow="Partners"
             title="Partner Companies"
-            description="Manage partner company names, logos, websites, sort order, visibility, and copy for partner product pages."
+            description="Manage brand names, logos, page content, and how each brand page is found in Google."
           />
           <details className={panelClass}>
             <AddSummary
-              title="Create partner company"
-              description="Add a partner logo, company page copy, and website link."
+              title="Add a brand"
+              description="Logo, page content, and the search wording for this brand."
               icon={Sparkles}
             />
             <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1494,12 +1738,12 @@ export function AdminWorkspace({
             icon={UsersRound}
             eyebrow="People"
             title="Team members"
-            description="Control the team section shown on the About page."
+            description="The people shown on your About page."
           />
           <details className={panelClass}>
             <AddSummary
-              title="Create team member"
-              description="Add a person to the About page team section."
+              title="Add a team member"
+              description="Add a person to your About page."
               icon={UsersRound}
             />
             <div className="mt-6 border-t border-charcoal/10 pt-6">
@@ -1532,9 +1776,9 @@ export function AdminWorkspace({
           <SectionHeader
             id="blog"
             icon={Newspaper}
-            eyebrow="Website Tab"
+            eyebrow="Website Section"
             title="Blog"
-            description="Write and publish articles. Each post has its own preview text, cover image, rich content, and search engine settings."
+            description="Write and publish articles. Each one gets a cover image, preview text, and its own wording for Google."
           />
           {blogPage ? (
             <PageEditorList pages={[blogPage]} section="blog" disabled={disabled} />
@@ -1544,35 +1788,44 @@ export function AdminWorkspace({
           <div className="mt-6 grid gap-4">
             <details className={panelClass}>
               <AddSummary
-                title="Write a blog post"
-                description="Add an article with headings, tables, links, a preview, and SEO settings."
+                title="Write an article"
+                description="Headings, bold text, tables, links, a cover image, and Google wording."
                 icon={Newspaper}
               />
               <div className="mt-6 border-t border-charcoal/10 pt-6">
                 <BlogForm section="blog" disabled={disabled} />
               </div>
             </details>
-            {data.blogPosts.length === 0 ? (
-              <div className="rounded-md bg-light-gray p-5 text-sm leading-7 text-slate">
-                No blog posts yet. Use the form above to publish the first one.
+
+            <div>
+              <ListFilter targetId="blog-list" placeholder="Search articles by title" noun="articles" />
+              <div id="blog-list" className="grid gap-4">
+                {data.blogPosts.length === 0 ? (
+                  <EmptyState message="No articles yet. Use the button above to write your first one." />
+                ) : null}
+                {data.blogPosts.map((post) => (
+                  <details
+                    key={post.id}
+                    data-search={`${post.title} ${post.slug} ${post.category} ${post.author}`}
+                    className={panelClass}
+                  >
+                    <EditSummary
+                      eyebrow={post.category || "Article"}
+                      title={post.title}
+                      meta={formatPublishedDate(post.publishedAt) || undefined}
+                      active={post.isActive}
+                    />
+                    <div className="mt-6 border-t border-charcoal/10 pt-6">
+                      <BlogForm post={post} section="blog" disabled={disabled} />
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <ViewOnSite path={`/blog/${post.slug}`} label="Read on website" />
+                        <ArchiveButton table="blog_posts" id={post.id} returnTo="/admin/blog" disabled={disabled} noun="article" />
+                      </div>
+                    </div>
+                  </details>
+                ))}
               </div>
-            ) : null}
-            {data.blogPosts.map((post) => (
-              <details key={post.id} className={panelClass}>
-                <EditSummary
-                  eyebrow="Blog post"
-                  title={post.title}
-                  meta={`/blog/${post.slug}`}
-                  active={post.isActive}
-                />
-                <div className="mt-6 border-t border-charcoal/10 pt-6">
-                  <BlogForm post={post} section="blog" disabled={disabled} />
-                  <div className="mt-4">
-                    <ArchiveButton table="blog_posts" id={post.id} returnTo="/admin/blog" disabled={disabled} />
-                  </div>
-                </div>
-              </details>
-            ))}
+            </div>
           </div>
         </section>
         ) : null}
@@ -1584,7 +1837,7 @@ export function AdminWorkspace({
             icon={Mail}
             eyebrow="Inbox"
             title="Contact inquiries"
-            description="Every public contact form submission is stored here with contact details, interest, message, timestamp, and tracking status."
+            description="Every enquiry sent through the website, with the sender's details, their message, and a status you can update."
           />
           <div className="grid gap-4">
             {data.submissions.length === 0 ? (
@@ -1654,17 +1907,17 @@ export function AdminWorkspace({
             icon={KeyRound}
             eyebrow="Security"
             title="Admin access"
-            description="Create or rotate an admin user. Environment password login remains available for recovery."
+            description="Add a login for a team member, or change an existing password."
           />
           <form action={saveAdminUser} className="grid gap-5 md:grid-cols-2">
             <input type="hidden" name="returnTo" value="/admin/access" />
-            <Field label="Admin name" name="name" defaultValue="Edward Trading Admin" disabled={disabled} />
-            <Field label="Admin email" name="email" type="email" required disabled={disabled} />
+            <Field label="Full name" name="name" defaultValue="Edward Trading Admin" disabled={disabled} />
+            <Field label="Email address" name="email" type="email" required disabled={disabled} help="This is the email they will log in with." />
             <div className="md:col-span-2">
               <Field label="New password" name="password" type="password" required disabled={disabled} />
             </div>
             <div className="md:col-span-2">
-              <SaveButton disabled={disabled} label="Save admin user" />
+              <SaveButton disabled={disabled} label="Save login" />
             </div>
           </form>
         </section>

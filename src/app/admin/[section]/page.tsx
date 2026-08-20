@@ -6,8 +6,9 @@ import type { AdminSection } from "@/components/admin/admin-form";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Admin CMS",
-  description: "Admin CMS for managing Edward Trading website content."
+  title: "Website Admin",
+  description: "Manage Edward Trading website content.",
+  robots: { index: false, follow: false }
 };
 
 const sections = new Set<AdminSection>([

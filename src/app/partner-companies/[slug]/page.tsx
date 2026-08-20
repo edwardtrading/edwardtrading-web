@@ -218,7 +218,7 @@ export default async function PartnerCompanyPage({
           </div>
           <ProductGrid
             products={products}
-            emptyText={`${company.name} products will appear here once they are published from the CMS.`}
+            emptyText={`${company.name} product listings are being updated. Contact our team for the current range.`}
           />
         </div>
       </section>

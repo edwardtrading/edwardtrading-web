@@ -1,4 +1,4 @@
-import { Database, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut } from "lucide-react";
 import { AdminSessionGuard } from "@/app/admin/admin-session-guard";
 import {
   AdminWorkspace,
@@ -35,10 +35,10 @@ export async function AdminScreen({
               name="returnTo"
               value={section === "overview" ? "/admin" : `/admin/${section}`}
             />
-            <h1 className="mb-5 text-xl font-bold text-black">Admin Login</h1>
+            <h1 className="mb-5 text-xl font-bold text-black">Sign in</h1>
             {!configured || !hasPassword ? (
               <div className="mb-4 border border-gray-300 bg-gray-50 p-3 text-sm text-gray-700">
-                Admin access is not configured yet.
+                Login is not available right now. Please contact your website support team.
               </div>
             ) : null}
             <label className="mb-4 block text-sm font-semibold text-black">
@@ -65,7 +65,7 @@ export async function AdminScreen({
               disabled={!hasPassword}
               className="min-h-10 border border-black bg-gray-200 px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Login
+              Sign in
             </button>
           </form>
         </div>
@@ -79,8 +79,8 @@ export async function AdminScreen({
         <div className="mb-6 flex flex-col gap-4 rounded-lg border border-charcoal/10 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary">
-              <Database aria-hidden className="h-4 w-4" />
-              Content Management
+              <LayoutDashboard aria-hidden className="h-4 w-4" />
+              Website Editor
             </p>
             <h1 className="mt-2 font-heading text-3xl font-extrabold text-charcoal md:text-4xl">
               Edward Trading Admin
@@ -99,7 +99,7 @@ export async function AdminScreen({
 
         {!configured ? (
           <div className="mb-6 rounded-lg border border-primary/20 bg-white p-5 text-sm leading-7 text-slate shadow-sm">
-            Connect the production content service to enable editing and inquiry management.
+            Editing is temporarily unavailable. Please contact your website support team.
           </div>
         ) : null}
 

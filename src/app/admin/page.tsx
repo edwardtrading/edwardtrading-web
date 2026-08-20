@@ -4,8 +4,9 @@ import { AdminScreen } from "@/app/admin/admin-screen";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Admin CMS",
-  description: "Admin CMS for managing Edward Trading website content."
+  title: "Website Admin",
+  description: "Manage Edward Trading website content.",
+  robots: { index: false, follow: false }
 };
 
 export default function AdminPage({

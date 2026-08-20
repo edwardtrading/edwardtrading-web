@@ -80,7 +80,7 @@ export default async function BlogPage() {
         <div className="container-page">
           {posts.length === 0 ? (
             <div className="rounded-lg bg-light-gray p-8 text-sm leading-7 text-slate">
-              Articles published from the CMS will appear here.
+              No articles have been published yet. Check back soon.
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

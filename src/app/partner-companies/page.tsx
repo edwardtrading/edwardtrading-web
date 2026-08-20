@@ -101,7 +101,7 @@ export default async function PartnerCompaniesPage() {
 
           {companies.length === 0 ? (
             <div className="rounded-lg bg-light-gray p-8 text-sm leading-7 text-slate">
-              Partner companies added from the CMS will appear here.
+              Partner company details are being updated. Please check back soon.
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
