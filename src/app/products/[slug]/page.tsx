@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, PackageCheck } from "lucide-react";
 import { submitProductInquiry } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
-import { getProductBySlug } from "@/lib/cms-data";
+import { getPartnerCompanyBySlug, getProductBySlug } from "@/lib/cms-data";
+import { breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
 import { site } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
@@ -57,19 +58,20 @@ export async function generateMetadata({
 
   if (!product) {
     return {
-      title: "Product Not Found"
+      title: "Product Not Found",
+      robots: { index: false, follow: false }
     };
   }
 
-  return {
-    title: product.name,
-    description: product.shortDescription,
-    openGraph: {
-      title: `${product.name} | ${site.name}`,
-      description: product.shortDescription,
-      images: product.imageUrl ? [product.imageUrl] : []
-    }
-  };
+  return buildMetadata({
+    metaTitle: product.metaTitle,
+    fallbackTitle: product.name,
+    metaDescription: product.metaDescription,
+    descriptionSources: [product.shortDescription, product.description],
+    keywords: product.metaKeywords,
+    path: `/products/${product.slug}`,
+    images: [product.imageUrl]
+  });
 }
 
 export default async function ProductPage({
@@ -84,20 +86,40 @@ export default async function ProductPage({
 
   const specifications = Object.entries(product.specifications);
   const youtubeEmbedUrl = getYoutubeEmbedUrl(product.youtubeUrl);
+  const company = product.companySlug
+    ? await getPartnerCompanyBySlug(product.companySlug)
+    : null;
 
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
     description: product.description,
-    image: product.imageUrl,
-    brand: product.companySlug
+    image: product.imageUrl || undefined,
+    sku: product.slug,
+    brand: company
       ? {
           "@type": "Brand",
-          name: product.companySlug
+          name: company.name
         }
-      : undefined
+      : undefined,
+    offers: {
+      "@type": "Offer",
+      availability: "https://schema.org/InStock",
+      priceCurrency: "NPR",
+      url: `${site.url}/products/${product.slug}`,
+      seller: {
+        "@type": "Organization",
+        name: site.name
+      }
+    }
   };
+
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Solutions", path: "/solutions" },
+    { name: product.name, path: `/products/${product.slug}` }
+  ]);
 
   return (
     <>
@@ -105,6 +127,12 @@ export default async function ProductPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(productJsonLd)
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbs)
         }}
       />
       <section className="bg-mesh-warm py-16 md:py-20">

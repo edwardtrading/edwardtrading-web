@@ -23,6 +23,7 @@ const sections = new Set<AdminSection>([
   "products",
   "companies",
   "team",
+  "blog",
   "inquiries",
   "access"
 ]);

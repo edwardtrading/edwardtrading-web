@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import {
   getAssociatedCompanies,
+  getBlogPosts,
   getProductCategories,
   getProducts
 } from "@/lib/cms-data";
@@ -14,14 +15,16 @@ const routes = [
   "/partner-companies",
   "/surgical-instruments",
   "/industries",
+  "/blog",
   "/contact"
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [products, categories, companies] = await Promise.all([
+  const [products, categories, companies, posts] = await Promise.all([
     getProducts(),
     getProductCategories(),
-    getAssociatedCompanies()
+    getAssociatedCompanies(),
+    getBlogPosts()
   ]);
   const staticRoutes = routes.map((route) => ({
     url: `${site.url}${route}`,
@@ -42,7 +45,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${site.url}/partner-companies/${company.slug}`,
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
-      priority: 0.7
+      // Distributor pages are the main organic entry point, so they rank above
+      // the rest of the generated routes.
+      priority: 0.9
+    })),
+    ...posts.map((post) => ({
+      url: `${site.url}/blog/${post.slug}`,
+      lastModified: new Date(post.publishedAt),
+      changeFrequency: "monthly" as const,
+      priority: 0.6
     })),
     ...products.map((product) => ({
       url: `${site.url}/products/${product.slug}`,

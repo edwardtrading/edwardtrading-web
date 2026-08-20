@@ -1,13 +1,18 @@
 import {
+  fallbackBlogPosts,
   fallbackCategories,
   fallbackCompanies,
   fallbackProducts,
   fallbackTeamMembers,
   type AssociatedCompany,
+  type BlogPost,
+  type CompanyFaq,
   type Product,
   type ProductCategory,
   type TeamMember
 } from "@/lib/fallback-data";
+import { sanitizeRichText } from "@/lib/rich-text";
+import { parseKeywords } from "@/lib/seo";
 import { heroImage, site } from "@/lib/site-data";
 import {
   getDatabaseClient,
@@ -29,6 +34,7 @@ export type CmsPage = {
   ctaHref: string;
   metaTitle: string;
   metaDescription: string;
+  metaKeywords: string[];
   isActive: boolean;
   updatedAt?: string;
 };
@@ -79,6 +85,11 @@ export type ManagedTeamMember = TeamMember & {
   isActive: boolean;
 };
 
+export type ManagedBlogPost = BlogPost & {
+  isActive: boolean;
+  sortOrder: number;
+};
+
 export const defaultPages: CmsPage[] = [
   {
     slug: "home-hero",
@@ -92,6 +103,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "/solutions",
     metaTitle: site.name,
     metaDescription: site.description,
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -106,6 +118,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -120,6 +133,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -134,6 +148,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "/partner-companies",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -148,6 +163,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -162,6 +178,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -176,6 +193,7 @@ export const defaultPages: CmsPage[] = [
     ctaHref: "/contact",
     metaTitle: "",
     metaDescription: "",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -191,6 +209,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "About Us",
     metaDescription:
       "Learn about Edward Trading Pvt. Ltd., a Nepal-based healthcare and trading company established in 2020.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -206,6 +225,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Solutions",
     metaDescription:
       "Explore diagnostic equipment, healthcare products, surgical instruments, medical equipment, cleaning and hygiene solutions, and hospital furniture in Nepal.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -221,6 +241,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Partner Companies",
     metaDescription:
       "View partner companies and supplier relationships for Edward Trading Pvt. Ltd.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -236,6 +257,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Cleaning & Hygiene",
     metaDescription:
       "Cleaning accessories, hygiene chemicals, facility care products, and institutional cleaning support in Nepal.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -251,6 +273,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Surgical Instruments",
     metaDescription:
       "Surgical items, healthcare products, diagnostic equipment, and medical supply support for healthcare teams in Nepal.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -266,6 +289,23 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Areas We Serve",
     metaDescription:
       "Edward Trading Pvt. Ltd. serves hospitals, clinics, hotels, commercial buildings, institutions, facility teams, and buyers across Nepal.",
+    metaKeywords: [],
+    isActive: true
+  },
+  {
+    slug: "blog",
+    eyebrow: "Insights & Updates",
+    title: "Healthcare, hygiene, and facility supply insights from Nepal.",
+    description:
+      "Guides, product explainers, and industry updates from the Edward Trading Pvt. Ltd. team for hospitals, hotels, and facility operators across Nepal.",
+    imageUrl: "",
+    videoUrl: "",
+    ctaLabel: "Contact Edward Trading",
+    ctaHref: "/contact",
+    metaTitle: "Blog",
+    metaDescription:
+      "Healthcare, cleaning, hygiene, and institutional supply insights for hospitals, hotels, and facility teams in Nepal.",
+    metaKeywords: [],
     isActive: true
   },
   {
@@ -281,6 +321,7 @@ export const defaultPages: CmsPage[] = [
     metaTitle: "Contact Us",
     metaDescription:
       "Contact Edward Trading Pvt. Ltd. for diagnostic equipment, healthcare products, surgical items, medical equipment, cleaning and hygiene solutions, and hospital furniture.",
+    metaKeywords: [],
     isActive: true
   }
 ];
@@ -543,6 +584,9 @@ function productFromRow(row: DbRow): Product {
         removeRetiredPublicCopy(value)
       ])
     ),
+    metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
+    metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
+    metaKeywords: parseKeywords(row.meta_keywords),
     isFeatured: Boolean(row.is_featured)
   };
 }
@@ -555,6 +599,9 @@ function categoryFromRow(row: DbRow): ProductCategory {
     summary: removeRetiredPublicCopy(String(row.summary ?? "")),
     description: removeRetiredPublicCopy(String(row.description ?? "")),
     imageUrl: String(row.image_url ?? ""),
+    metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
+    metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
+    metaKeywords: parseKeywords(row.meta_keywords),
     isFeatured: Boolean(row.is_featured)
   };
 }
@@ -575,11 +622,84 @@ function managedProductFromRow(row: DbRow): ManagedProduct {
   };
 }
 
+/**
+ * Columns and tables added after the first deployment. Run once per server
+ * instance so a database that predates `npm run db:migrate` still serves reads
+ * instead of falling back to the built-in content.
+ */
+let schemaUpgrade: Promise<void> | null = null;
+
+const schemaUpgradeStatements = [
+  `CREATE TABLE IF NOT EXISTS blog_posts (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    excerpt TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    cover_image_url TEXT NOT NULL DEFAULT '',
+    cover_image_alt TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    meta_title TEXT NOT NULL DEFAULT '',
+    meta_description TEXT NOT NULL DEFAULT '',
+    meta_keywords TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_featured INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  "ALTER TABLE products ADD COLUMN meta_title TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE products ADD COLUMN meta_description TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE products ADD COLUMN meta_keywords TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE product_categories ADD COLUMN meta_title TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE product_categories ADD COLUMN meta_description TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE product_categories ADD COLUMN meta_keywords TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN meta_title TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN meta_description TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN meta_keywords TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN heading TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN eyebrow TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN content TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN faqs TEXT NOT NULL DEFAULT '[]'",
+  "ALTER TABLE associated_companies ADD COLUMN highlights TEXT NOT NULL DEFAULT '[]'",
+  "ALTER TABLE associated_companies ADD COLUMN distributor_status TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE associated_companies ADD COLUMN territory TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE cms_pages ADD COLUMN meta_keywords TEXT NOT NULL DEFAULT ''"
+];
+
+export async function ensureSchemaUpgrades() {
+  if (!hasDatabaseConfig()) {
+    return;
+  }
+
+  if (!schemaUpgrade) {
+    schemaUpgrade = (async () => {
+      const db = getDatabaseClient();
+
+      for (const sql of schemaUpgradeStatements) {
+        try {
+          await db.execute({ sql, args: [] });
+        } catch {
+          // Already applied on databases that have been migrated.
+        }
+      }
+    })().catch(() => {
+      // Never let a schema probe take down a page render; reads fall back instead.
+      schemaUpgrade = null;
+    });
+  }
+
+  await schemaUpgrade;
+}
+
 async function ensureProductCategoriesTable() {
   if (!hasDatabaseConfig()) {
     return;
   }
 
+  await ensureSchemaUpgrades();
   const db = getDatabaseClient();
   await db.execute({
     sql: `CREATE TABLE IF NOT EXISTS product_categories (
@@ -599,6 +719,29 @@ async function ensureProductCategoriesTable() {
   });
 }
 
+function parseFaqs(value: unknown): CompanyFaq[] {
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((item) => ({
+        question: String(item?.question ?? "").trim(),
+        answer: String(item?.answer ?? "").trim()
+      }))
+      .filter((item) => item.question && item.answer);
+  } catch {
+    return [];
+  }
+}
+
 function companyFromRow(row: DbRow): AssociatedCompany {
   return {
     id: String(row.id),
@@ -608,7 +751,44 @@ function companyFromRow(row: DbRow): AssociatedCompany {
     description: removeRetiredPublicCopy(String(row.description ?? "")),
     logoUrl: String(row.logo_url ?? ""),
     websiteUrl: row.website_url ? String(row.website_url) : null,
+    eyebrow: removeRetiredPublicCopy(String(row.eyebrow ?? "")),
+    heading: removeRetiredPublicCopy(String(row.heading ?? "")),
+    content: sanitizeRichText(String(row.content ?? "")),
+    faqs: parseFaqs(row.faqs),
+    highlights: parseJsonArray(row.highlights).map(removeRetiredPublicCopy),
+    distributorStatus: String(row.distributor_status ?? ""),
+    territory: String(row.territory ?? ""),
+    metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
+    metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
+    metaKeywords: parseKeywords(row.meta_keywords),
     isFeatured: Boolean(row.is_featured)
+  };
+}
+
+function blogPostFromRow(row: DbRow): BlogPost {
+  return {
+    id: String(row.id),
+    slug: String(row.slug),
+    title: String(row.title ?? ""),
+    excerpt: String(row.excerpt ?? ""),
+    content: sanitizeRichText(String(row.content ?? "")),
+    coverImageUrl: String(row.cover_image_url ?? ""),
+    coverImageAlt: String(row.cover_image_alt ?? ""),
+    author: String(row.author ?? ""),
+    category: String(row.category ?? ""),
+    publishedAt: String(row.published_at ?? ""),
+    metaTitle: String(row.meta_title ?? ""),
+    metaDescription: String(row.meta_description ?? ""),
+    metaKeywords: parseKeywords(row.meta_keywords),
+    isFeatured: Boolean(row.is_featured)
+  };
+}
+
+function managedBlogPostFromRow(row: DbRow): ManagedBlogPost {
+  return {
+    ...blogPostFromRow(row),
+    isActive: Boolean(row.is_active),
+    sortOrder: Number(row.sort_order ?? 0)
   };
 }
 
@@ -650,6 +830,7 @@ function pageFromRow(row: DbRow): CmsPage {
     ctaHref: String(row.cta_href ?? ""),
     metaTitle: String(row.meta_title ?? ""),
     metaDescription: String(row.meta_description ?? ""),
+    metaKeywords: parseKeywords(row.meta_keywords),
     isActive: Boolean(row.is_active),
     updatedAt: row.updated_at ? String(row.updated_at) : undefined
   };
@@ -893,6 +1074,7 @@ export async function getProductBySlug(slug: string) {
 
 export async function getAssociatedCompanies() {
   return safeQuery(async () => {
+    await ensureSchemaUpgrades();
     const db = getDatabaseClient();
     const result = await db.execute({
       sql: "SELECT * FROM associated_companies WHERE is_active = 1 ORDER BY sort_order ASC, name ASC",
@@ -908,6 +1090,7 @@ export async function getPartnerCompanyBySlug(slug: string) {
     fallbackCompanies.find((company) => company.slug === slug) ?? null;
 
   return safeQuery(async () => {
+    await ensureSchemaUpgrades();
     const db = getDatabaseClient();
     const result = await db.execute({
       sql: "SELECT * FROM associated_companies WHERE is_active = 1 AND slug = ? LIMIT 1",
@@ -917,6 +1100,52 @@ export async function getPartnerCompanyBySlug(slug: string) {
     const row = result.rows[0];
     return row ? companyFromRow(row as DbRow) : null;
   }, fallback);
+}
+
+export async function getBlogPosts(limit?: number) {
+  return safeQuery(async () => {
+    await ensureSchemaUpgrades();
+    const db = getDatabaseClient();
+    const result = await db.execute({
+      sql: `SELECT * FROM blog_posts
+        WHERE is_active = 1
+        ORDER BY sort_order ASC, published_at DESC${limit ? " LIMIT ?" : ""}`,
+      args: limit ? [limit] : []
+    });
+
+    return result.rows.map((row) => blogPostFromRow(row as DbRow));
+  }, fallbackBlogPosts);
+}
+
+export async function getBlogPostBySlug(slug: string) {
+  return safeQuery(async () => {
+    await ensureSchemaUpgrades();
+    const db = getDatabaseClient();
+    const result = await db.execute({
+      sql: "SELECT * FROM blog_posts WHERE is_active = 1 AND slug = ? LIMIT 1",
+      args: [slug]
+    });
+
+    const row = result.rows[0];
+    return row ? blogPostFromRow(row as DbRow) : null;
+  }, null);
+}
+
+/** Posts shown under an article, excluding the article itself. */
+export async function getRelatedBlogPosts(slug: string, limit = 3) {
+  return safeQuery(async () => {
+    await ensureSchemaUpgrades();
+    const db = getDatabaseClient();
+    const result = await db.execute({
+      sql: `SELECT * FROM blog_posts
+        WHERE is_active = 1 AND slug != ?
+        ORDER BY is_featured DESC, published_at DESC
+        LIMIT ?`,
+      args: [slug, limit]
+    });
+
+    return result.rows.map((row) => blogPostFromRow(row as DbRow));
+  }, []);
 }
 
 export async function getTeamMembers() {
@@ -1003,14 +1232,24 @@ export async function getAdminDashboardData() {
       })),
       pages: defaultPages,
       resources: defaultResources,
+      blogPosts: [] as ManagedBlogPost[],
       submissions: [] as ContactSubmission[]
     };
   }
 
   const db = getDatabaseClient();
   await ensureProductCategoriesTable();
-  const [categories, products, companies, teamMembers, pages, resources, submissions] =
-    await Promise.all([
+  await ensureSchemaUpgrades();
+  const [
+    categories,
+    products,
+    companies,
+    teamMembers,
+    pages,
+    resources,
+    blogPosts,
+    submissions
+  ] = await Promise.all([
       db.execute({
         sql: "SELECT * FROM product_categories ORDER BY sort_order ASC, name ASC",
         args: []
@@ -1033,6 +1272,10 @@ export async function getAdminDashboardData() {
       }),
       db.execute({
         sql: "SELECT * FROM cms_resources ORDER BY group_name ASC, sort_order ASC, label ASC",
+        args: []
+      }),
+      db.execute({
+        sql: "SELECT * FROM blog_posts ORDER BY sort_order ASC, published_at DESC",
         args: []
       }),
       db.execute({
@@ -1073,6 +1316,7 @@ export async function getAdminDashboardData() {
       ),
       ...storedResources
     ],
+    blogPosts: blogPosts.rows.map((row) => managedBlogPostFromRow(row as DbRow)),
     submissions: submissions.rows.map((row) => submissionFromRow(row as DbRow))
   };
 }

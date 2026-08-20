@@ -36,6 +36,7 @@ export const navItems = [
   { label: "Solutions", href: "/solutions" },
   { label: "Partner Companies", href: "/partner-companies" },
   { label: "Areas We Serve", href: "/industries" },
+  { label: "Blog", href: "/blog" },
   { label: "Contact", href: "/contact" }
 ];
 

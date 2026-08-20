@@ -6,6 +6,16 @@ CREATE TABLE IF NOT EXISTS associated_companies (
   description TEXT NOT NULL DEFAULT '',
   logo_url TEXT NOT NULL DEFAULT '',
   website_url TEXT,
+  eyebrow TEXT NOT NULL DEFAULT '',
+  heading TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  faqs TEXT NOT NULL DEFAULT '[]',
+  highlights TEXT NOT NULL DEFAULT '[]',
+  distributor_status TEXT NOT NULL DEFAULT '',
+  territory TEXT NOT NULL DEFAULT '',
+  meta_title TEXT NOT NULL DEFAULT '',
+  meta_description TEXT NOT NULL DEFAULT '',
+  meta_keywords TEXT NOT NULL DEFAULT '',
   is_featured INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -20,6 +30,9 @@ CREATE TABLE IF NOT EXISTS product_categories (
   summary TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   image_url TEXT NOT NULL DEFAULT '',
+  meta_title TEXT NOT NULL DEFAULT '',
+  meta_description TEXT NOT NULL DEFAULT '',
+  meta_keywords TEXT NOT NULL DEFAULT '',
   is_featured INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -39,6 +52,9 @@ CREATE TABLE IF NOT EXISTS products (
   company_slug TEXT,
   features TEXT NOT NULL DEFAULT '[]',
   specifications TEXT NOT NULL DEFAULT '{}',
+  meta_title TEXT NOT NULL DEFAULT '',
+  meta_description TEXT NOT NULL DEFAULT '',
+  meta_keywords TEXT NOT NULL DEFAULT '',
   is_featured INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -87,6 +103,7 @@ CREATE TABLE IF NOT EXISTS cms_pages (
   cta_href TEXT NOT NULL DEFAULT '',
   meta_title TEXT NOT NULL DEFAULT '',
   meta_description TEXT NOT NULL DEFAULT '',
+  meta_keywords TEXT NOT NULL DEFAULT '',
   is_active INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -121,3 +138,27 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  excerpt TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  cover_image_url TEXT NOT NULL DEFAULT '',
+  cover_image_alt TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  meta_title TEXT NOT NULL DEFAULT '',
+  meta_description TEXT NOT NULL DEFAULT '',
+  meta_keywords TEXT NOT NULL DEFAULT '',
+  published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_featured INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at
+ON blog_posts(published_at DESC);

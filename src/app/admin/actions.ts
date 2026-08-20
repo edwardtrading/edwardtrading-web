@@ -12,6 +12,12 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDatabaseClient, hasDatabaseConfig } from "@/lib/database";
+import { ensureSchemaUpgrades } from "@/lib/cms-data";
+import {
+  htmlToPlainText,
+  sanitizeRichText,
+  truncateText
+} from "@/lib/rich-text";
 
 const adminCookieName = "edward_trading_admin";
 const sessionMaxAge = 60 * 60 * 8;
@@ -65,6 +71,71 @@ function specsToJson(value: FormDataEntryValue | null) {
 
 function metadataToJson(value: FormDataEntryValue | null) {
   return specsToJson(value);
+}
+
+/** Keywords are entered one per line and stored as a comma separated list. */
+function keywordsToText(value: FormDataEntryValue | null) {
+  return String(value ?? "")
+    .split(/[,\r\n]/)
+    .map((item) => item.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * FAQ entries are written as alternating "Q: ..." / "A: ..." lines so the CMS
+ * stays a plain form. Stored as JSON to drive the FAQPage structured data.
+ */
+function faqsToJson(value: FormDataEntryValue | null) {
+  const entries: { question: string; answer: string }[] = [];
+  let current: { question: string; answer: string } | null = null;
+
+  const flush = () => {
+    if (current && current.question && current.answer) {
+      entries.push(current);
+    }
+  };
+
+  for (const rawLine of String(value ?? "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    const question = /^q\s*[:.)-]\s*(.+)$/i.exec(line);
+    const answer = /^a\s*[:.)-]\s*(.+)$/i.exec(line);
+
+    if (question) {
+      flush();
+      current = { question: question[1].trim(), answer: "" };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const text = answer ? answer[1].trim() : line;
+    current.answer = current.answer ? `${current.answer} ${text}` : text;
+  }
+
+  flush();
+
+  return JSON.stringify(entries);
+}
+
+function publishedAtValue(value: FormDataEntryValue | null) {
+  const raw = clean(value);
+
+  if (!raw) {
+    return new Date().toISOString();
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime())
+    ? new Date().toISOString()
+    : parsed.toISOString();
 }
 
 async function saveUpload(
@@ -298,6 +369,7 @@ function revalidateCmsPaths() {
     "/surgical-instruments",
     "/industries",
     "/contact",
+    "/blog",
     "/admin",
     "/admin/pages",
     "/admin/resources",
@@ -305,6 +377,7 @@ function revalidateCmsPaths() {
     "/admin/products",
     "/admin/companies",
     "/admin/team",
+    "/admin/blog",
     "/admin/inquiries",
     "/admin/access"
   ].forEach((path) => revalidatePath(path));
@@ -384,6 +457,7 @@ export async function saveAdminUser(formData: FormData) {
 export async function savePageContent(formData: FormData) {
   await requireAdmin();
   await ensureCmsPageVideoColumn();
+  await ensureSchemaUpgrades();
   const db = requireDatabase();
   const slug = slugify(clean(formData.get("slug")));
   const uploadedImage = await saveUpload(formData.get("imageFile"), "pages", slug);
@@ -398,8 +472,8 @@ export async function savePageContent(formData: FormData) {
   await db.execute({
     sql: `INSERT INTO cms_pages (
       slug, title, eyebrow, description, image_url, video_url, cta_label, cta_href,
-      meta_title, meta_description, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      meta_title, meta_description, meta_keywords, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
       title = excluded.title,
       eyebrow = excluded.eyebrow,
@@ -410,6 +484,7 @@ export async function savePageContent(formData: FormData) {
       cta_href = excluded.cta_href,
       meta_title = excluded.meta_title,
       meta_description = excluded.meta_description,
+      meta_keywords = excluded.meta_keywords,
       is_active = excluded.is_active,
       updated_at = CURRENT_TIMESTAMP`,
     args: [
@@ -423,6 +498,7 @@ export async function savePageContent(formData: FormData) {
       clean(formData.get("ctaHref")),
       clean(formData.get("metaTitle")),
       clean(formData.get("metaDescription")),
+      keywordsToText(formData.get("metaKeywords")),
       activeValue(formData)
     ]
   });
@@ -473,6 +549,7 @@ export async function saveResource(formData: FormData) {
 export async function saveProductCategory(formData: FormData) {
   await requireAdmin();
   await ensureProductCategoriesTable();
+  await ensureSchemaUpgrades();
   const db = requireDatabase();
   const id = clean(formData.get("id")) || crypto.randomUUID();
   const name = clean(formData.get("name"));
@@ -486,15 +563,19 @@ export async function saveProductCategory(formData: FormData) {
 
   await db.execute({
     sql: `INSERT INTO product_categories (
-      id, slug, name, summary, description, image_url, is_featured,
+      id, slug, name, summary, description, image_url,
+      meta_title, meta_description, meta_keywords, is_featured,
       is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       slug = excluded.slug,
       name = excluded.name,
       summary = excluded.summary,
       description = excluded.description,
       image_url = excluded.image_url,
+      meta_title = excluded.meta_title,
+      meta_description = excluded.meta_description,
+      meta_keywords = excluded.meta_keywords,
       is_featured = excluded.is_featured,
       is_active = excluded.is_active,
       sort_order = excluded.sort_order,
@@ -506,6 +587,9 @@ export async function saveProductCategory(formData: FormData) {
       clean(formData.get("summary")),
       clean(formData.get("description")),
       imageUrl,
+      clean(formData.get("metaTitle")),
+      clean(formData.get("metaDescription")),
+      keywordsToText(formData.get("metaKeywords")),
       formData.get("isFeatured") ? 1 : 0,
       activeValue(formData),
       Number(formData.get("sortOrder") ?? 0)
@@ -520,6 +604,7 @@ export async function saveProductCategory(formData: FormData) {
 export async function saveProduct(formData: FormData) {
   await requireAdmin();
   await ensureProductEnhancementColumns();
+  await ensureSchemaUpgrades();
   const db = requireDatabase();
   const id = clean(formData.get("id")) || crypto.randomUUID();
   const name = clean(formData.get("name"));
@@ -536,9 +621,10 @@ export async function saveProduct(formData: FormData) {
   await db.execute({
     sql: `INSERT INTO products (
       id, slug, name, category_slug, short_description, description,
-      image_url, youtube_url, company_slug, features, specifications, is_featured,
+      image_url, youtube_url, company_slug, features, specifications,
+      meta_title, meta_description, meta_keywords, is_featured,
       is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       slug = excluded.slug,
       name = excluded.name,
@@ -550,6 +636,9 @@ export async function saveProduct(formData: FormData) {
       company_slug = excluded.company_slug,
       features = excluded.features,
       specifications = excluded.specifications,
+      meta_title = excluded.meta_title,
+      meta_description = excluded.meta_description,
+      meta_keywords = excluded.meta_keywords,
       is_featured = excluded.is_featured,
       is_active = excluded.is_active,
       sort_order = excluded.sort_order,
@@ -566,6 +655,9 @@ export async function saveProduct(formData: FormData) {
       companySlug,
       linesToJson(formData.get("features")),
       specsToJson(formData.get("specifications")),
+      clean(formData.get("metaTitle")),
+      clean(formData.get("metaDescription")),
+      keywordsToText(formData.get("metaKeywords")),
       formData.get("isFeatured") ? 1 : 0,
       activeValue(formData),
       Number(formData.get("sortOrder") ?? 0)
@@ -581,6 +673,7 @@ export async function saveProduct(formData: FormData) {
 
 export async function saveAssociatedCompany(formData: FormData) {
   await requireAdmin();
+  await ensureSchemaUpgrades();
   const db = requireDatabase();
   const id = clean(formData.get("id")) || crypto.randomUUID();
   const name = clean(formData.get("name"));
@@ -591,8 +684,10 @@ export async function saveAssociatedCompany(formData: FormData) {
   await db.execute({
     sql: `INSERT INTO associated_companies (
       id, slug, name, summary, description, logo_url, website_url,
+      eyebrow, heading, content, faqs, highlights, distributor_status, territory,
+      meta_title, meta_description, meta_keywords,
       is_featured, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       slug = excluded.slug,
       name = excluded.name,
@@ -600,6 +695,16 @@ export async function saveAssociatedCompany(formData: FormData) {
       description = excluded.description,
       logo_url = excluded.logo_url,
       website_url = excluded.website_url,
+      eyebrow = excluded.eyebrow,
+      heading = excluded.heading,
+      content = excluded.content,
+      faqs = excluded.faqs,
+      highlights = excluded.highlights,
+      distributor_status = excluded.distributor_status,
+      territory = excluded.territory,
+      meta_title = excluded.meta_title,
+      meta_description = excluded.meta_description,
+      meta_keywords = excluded.meta_keywords,
       is_featured = excluded.is_featured,
       is_active = excluded.is_active,
       sort_order = excluded.sort_order,
@@ -612,6 +717,16 @@ export async function saveAssociatedCompany(formData: FormData) {
       clean(formData.get("description")),
       logoUrl,
       clean(formData.get("websiteUrl")) || null,
+      clean(formData.get("eyebrow")),
+      clean(formData.get("heading")),
+      sanitizeRichText(String(formData.get("content") ?? "")),
+      faqsToJson(formData.get("faqs")),
+      linesToJson(formData.get("highlights")),
+      clean(formData.get("distributorStatus")),
+      clean(formData.get("territory")),
+      clean(formData.get("metaTitle")),
+      clean(formData.get("metaDescription")),
+      keywordsToText(formData.get("metaKeywords")),
       formData.get("isFeatured") ? 1 : 0,
       activeValue(formData),
       Number(formData.get("sortOrder") ?? 0)
@@ -621,6 +736,73 @@ export async function saveAssociatedCompany(formData: FormData) {
   revalidateCmsPaths();
   revalidatePath(`/partner-companies/${slug}`);
   redirectToSaved(formData, "Partner company saved. Website visibility is updated.");
+}
+
+export async function saveBlogPost(formData: FormData) {
+  await requireAdmin();
+  await ensureSchemaUpgrades();
+  const db = requireDatabase();
+  const id = clean(formData.get("id")) || crypto.randomUUID();
+  const title = clean(formData.get("title"));
+  const slug = slugify(clean(formData.get("slug")) || title);
+  const uploadedImage = await saveUpload(formData.get("coverImageFile"), "blog", slug);
+  const coverImageUrl = uploadedImage || clean(formData.get("coverImageUrl"));
+  const content = sanitizeRichText(String(formData.get("content") ?? ""));
+
+  if (!title || !slug) {
+    throw new Error("A blog post needs a title.");
+  }
+
+  const excerpt =
+    clean(formData.get("excerpt")) ||
+    truncateText(htmlToPlainText(content), 200);
+
+  await db.execute({
+    sql: `INSERT INTO blog_posts (
+      id, slug, title, excerpt, content, cover_image_url, cover_image_alt,
+      author, category, meta_title, meta_description, meta_keywords,
+      published_at, is_featured, is_active, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      slug = excluded.slug,
+      title = excluded.title,
+      excerpt = excluded.excerpt,
+      content = excluded.content,
+      cover_image_url = excluded.cover_image_url,
+      cover_image_alt = excluded.cover_image_alt,
+      author = excluded.author,
+      category = excluded.category,
+      meta_title = excluded.meta_title,
+      meta_description = excluded.meta_description,
+      meta_keywords = excluded.meta_keywords,
+      published_at = excluded.published_at,
+      is_featured = excluded.is_featured,
+      is_active = excluded.is_active,
+      sort_order = excluded.sort_order,
+      updated_at = CURRENT_TIMESTAMP`,
+    args: [
+      id,
+      slug,
+      title,
+      excerpt,
+      content,
+      coverImageUrl,
+      clean(formData.get("coverImageAlt")) || title,
+      clean(formData.get("author")),
+      clean(formData.get("category")),
+      clean(formData.get("metaTitle")),
+      clean(formData.get("metaDescription")),
+      keywordsToText(formData.get("metaKeywords")),
+      publishedAtValue(formData.get("publishedAt")),
+      formData.get("isFeatured") ? 1 : 0,
+      activeValue(formData),
+      Number(formData.get("sortOrder") ?? 0)
+    ]
+  });
+
+  revalidateCmsPaths();
+  revalidatePath(`/blog/${slug}`);
+  redirectToSaved(formData, "Blog post saved. Website visibility is updated.");
 }
 
 export async function saveTeamMember(formData: FormData) {
@@ -671,7 +853,8 @@ export async function archiveRecord(formData: FormData) {
     "product_categories",
     "associated_companies",
     "team_members",
-    "cms_resources"
+    "cms_resources",
+    "blog_posts"
   ]);
 
   if (!allowedTables.has(table)) {
@@ -771,3 +954,4 @@ export const createProduct = saveProduct;
 export const createProductCategory = saveProductCategory;
 export const createAssociatedCompany = saveAssociatedCompany;
 export const createTeamMember = saveTeamMember;
+export const createBlogPost = saveBlogPost;

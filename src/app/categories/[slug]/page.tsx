@@ -6,6 +6,8 @@ import {
   getProductCategoryBySlug,
   getProductsByCategory
 } from "@/lib/cms-data";
+import { breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
+import { site } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +24,20 @@ export async function generateMetadata({
 
   if (!category) {
     return {
-      title: "Category Not Found"
+      title: "Category Not Found",
+      robots: { index: false, follow: false }
     };
   }
 
-  return {
-    title: category.name,
-    description: category.summary || category.description
-  };
+  return buildMetadata({
+    metaTitle: category.metaTitle,
+    fallbackTitle: category.name,
+    metaDescription: category.metaDescription,
+    descriptionSources: [category.summary, category.description],
+    keywords: category.metaKeywords,
+    path: `/categories/${category.slug}`,
+    images: [category.imageUrl]
+  });
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
@@ -42,8 +50,34 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     notFound();
   }
 
+  const structuredData = [
+    breadcrumbJsonLd([
+      { name: "Home", path: "/" },
+      { name: "Solutions", path: "/solutions" },
+      { name: category.name, path: `/categories/${category.slug}` }
+    ]),
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: `${category.name} products`,
+      itemListElement: products.map((product, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        name: product.name,
+        url: `${site.url}/products/${product.slug}`
+      }))
+    }
+  ];
+
   return (
     <>
+      {structuredData.map((schema, index) => (
+        <script
+          key={index}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      ))}
       <PageHero
         eyebrow="Category"
         title={category.name}

@@ -10,6 +10,7 @@ import {
   KeyRound,
   Layers3,
   Mail,
+  Newspaper,
   Package,
   Pencil,
   Sparkles,
@@ -22,21 +23,25 @@ import {
   saveAssociatedCompany,
   savePageContent,
   saveProduct,
+  saveBlogPost,
   saveProductCategory,
   saveResource,
   saveTeamMember,
   updateSubmissionStatus
 } from "@/app/admin/actions";
 import { SaveButton, SavedNotice } from "@/components/admin/form-submit";
+import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import type {
   CmsPage,
   CmsResource,
   ContactSubmission,
+  ManagedBlogPost,
   ManagedCategory,
   ManagedCompany,
   ManagedProduct,
   ManagedTeamMember
 } from "@/lib/cms-data";
+import { distributorKeywordVariants, keywordsToText } from "@/lib/seo";
 
 type AdminData = {
   categories: ManagedCategory[];
@@ -45,6 +50,7 @@ type AdminData = {
   teamMembers: ManagedTeamMember[];
   pages: CmsPage[];
   resources: CmsResource[];
+  blogPosts: ManagedBlogPost[];
   submissions: ContactSubmission[];
 };
 
@@ -62,6 +68,7 @@ export type AdminSection =
   | "products"
   | "companies"
   | "team"
+  | "blog"
   | "inquiries"
   | "access";
 
@@ -74,6 +81,7 @@ const adminSections: { label: string; section: AdminSection; href: string }[] = 
   { label: "Partner Companies", section: "partner-companies", href: "/admin/partner-companies" },
   { label: "Products", section: "products", href: "/admin/products" },
   { label: "Contact", section: "contact", href: "/admin/contact" },
+  { label: "Blog", section: "blog", href: "/admin/blog" },
   { label: "Inquiries", section: "inquiries", href: "/admin/inquiries" },
   { label: "Access", section: "access", href: "/admin/access" }
 ];
@@ -101,6 +109,7 @@ const pageLabels: Record<string, { group: string; label: string }> = {
     label: "Surgical instruments page"
   },
   industries: { group: "Public Pages", label: "Areas we serve page" },
+  blog: { group: "Public Pages", label: "Blog listing page" },
   contact: { group: "Public Pages", label: "Contact page" }
 };
 
@@ -121,6 +130,7 @@ const visibleAdminSections = new Set<AdminSection>([
   "partner-companies",
   "products",
   "contact",
+  "blog",
   "inquiries",
   "access"
 ]);
@@ -265,6 +275,71 @@ function Toggle({
         className="h-4 w-4 accent-primary"
       />
     </label>
+  );
+}
+
+function faqsToLines(faqs: { question: string; answer: string }[] | undefined) {
+  return (faqs ?? [])
+    .map((faq) => `Q: ${faq.question}\nA: ${faq.answer}`)
+    .join("\n\n");
+}
+
+/**
+ * Search settings shared by products, categories, partner companies, pages, and
+ * blog posts. Leaving a field blank keeps the automatic fallback, which is why
+ * every input shows the value the page would use on its own.
+ */
+function SeoFieldset({
+  metaTitle,
+  metaDescription,
+  metaKeywords,
+  disabled,
+  titlePlaceholder,
+  descriptionPlaceholder,
+  keywordsPlaceholder,
+  note
+}: {
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string[];
+  disabled: boolean;
+  titlePlaceholder?: string;
+  descriptionPlaceholder?: string;
+  keywordsPlaceholder?: string;
+  note?: string;
+}) {
+  return (
+    <div className="grid gap-5 rounded-md border border-charcoal/10 bg-light-gray/60 p-4 md:col-span-2 md:grid-cols-2">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary md:col-span-2">
+        Search engine settings
+      </p>
+      <Field
+        label="Meta title"
+        name="metaTitle"
+        defaultValue={metaTitle}
+        disabled={disabled}
+        placeholder={titlePlaceholder ?? "Shown as the Google result title (about 60 characters)"}
+      />
+      <Field
+        label="Meta description"
+        name="metaDescription"
+        defaultValue={metaDescription}
+        disabled={disabled}
+        placeholder={descriptionPlaceholder ?? "Shown under the title in Google (about 155 characters)"}
+      />
+      <TextArea
+        label="Target keywords"
+        name="metaKeywords"
+        defaultValue={keywordsToText(metaKeywords)}
+        rows={4}
+        disabled={disabled}
+        placeholder={keywordsPlaceholder ?? "One keyword per line"}
+      />
+      <p className="text-xs font-normal leading-6 text-slate md:col-span-2">
+        {note ??
+          "Leave a field blank to use the automatic value built from the content above."}
+      </p>
+    </div>
   );
 }
 
@@ -445,6 +520,14 @@ function CategoryForm({
         <Field label="Short summary" name="summary" defaultValue={category?.summary} required disabled={disabled} />
       </div>
       <TextArea label="Description" name="description" defaultValue={category?.description} required disabled={disabled} />
+      <SeoFieldset
+        metaTitle={category?.metaTitle}
+        metaDescription={category?.metaDescription}
+        metaKeywords={category?.metaKeywords}
+        disabled={disabled}
+        titlePlaceholder={category ? `Defaults to: ${category.name}` : "Defaults to the category name"}
+        descriptionPlaceholder="Defaults to the short summary"
+      />
       <Field label="Sort order" name="sortOrder" type="number" defaultValue={category?.sortOrder ?? 0} disabled={disabled} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Toggle name="isFeatured" label="Feature on website" defaultChecked={category?.isFeatured ?? true} disabled={disabled} />
@@ -529,6 +612,17 @@ function ProductForm({
       <TextArea label="Full description" name="description" defaultValue={product?.description} required disabled={disabled} />
       <TextArea label="Features" name="features" defaultValue={product?.features.join("\n")} rows={5} disabled={disabled} placeholder="One feature per line" />
       <TextArea label="Specifications" name="specifications" defaultValue={product ? specsToLines(product.specifications) : ""} rows={5} disabled={disabled} placeholder="Category: Cleaning chemical" />
+      <SeoFieldset
+        metaTitle={product?.metaTitle}
+        metaDescription={product?.metaDescription}
+        metaKeywords={product?.metaKeywords}
+        disabled={disabled}
+        titlePlaceholder={product ? `Defaults to: ${product.name}` : "Defaults to the product name"}
+        descriptionPlaceholder="Defaults to the short description"
+        keywordsPlaceholder={`One keyword per line, for example:
+Taski Ergodisc 165 price in Nepal
+floor scrubber Nepal`}
+      />
       <Field label="Sort order" name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} disabled={disabled} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Toggle name="isFeatured" label="Feature on website" defaultChecked={product?.isFeatured ?? false} disabled={disabled} />
@@ -565,6 +659,106 @@ function CompanyForm({
       </div>
       <TextArea label="Description" name="description" defaultValue={company?.description ?? ""} disabled={disabled} />
       <Field label="Website URL" name="websiteUrl" type="url" defaultValue={company?.websiteUrl ?? ""} disabled={disabled} />
+
+      <div className="grid gap-5 rounded-md border border-charcoal/10 bg-light-gray/60 p-4 md:col-span-2 md:grid-cols-2">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary md:col-span-2">
+          Distributor positioning
+        </p>
+        <Field
+          label="Distributor status"
+          name="distributorStatus"
+          defaultValue={company?.distributorStatus ?? ""}
+          disabled={disabled}
+          placeholder="Authorized Distributor"
+        />
+        <Field
+          label="Territory"
+          name="territory"
+          defaultValue={company?.territory ?? ""}
+          disabled={disabled}
+          placeholder="Nepal"
+        />
+        <Field
+          label="Eyebrow (small label above the heading)"
+          name="eyebrow"
+          defaultValue={company?.eyebrow ?? ""}
+          disabled={disabled}
+          placeholder="Authorized Distributor in Nepal"
+        />
+        <Field
+          label="Page heading (H1)"
+          name="heading"
+          defaultValue={company?.heading ?? ""}
+          disabled={disabled}
+          placeholder={
+            company?.name
+              ? `${company.name} Distributor in Nepal`
+              : "Brand Distributor in Nepal"
+          }
+        />
+        <TextArea
+          label="Key points"
+          name="highlights"
+          defaultValue={(company?.highlights ?? []).join("\n")}
+          rows={5}
+          disabled={disabled}
+          placeholder={`One point per line, for example:
+Nationwide supply across Nepal
+Genuine products with warranty support`}
+        />
+        <p className="text-xs font-normal leading-6 text-slate md:col-span-2">
+          Distributor status and territory are combined into the page copy, the
+          structured data, and the automatic keyword list, so filling them in is
+          what makes searches like &quot;Authorized {company?.name || "Brand"} Distributor in Nepal&quot;
+          match this page.
+        </p>
+      </div>
+
+      <RichTextEditor
+        label="Company page content"
+        name="content"
+        defaultValue={company?.content ?? ""}
+        disabled={disabled}
+        helpText="Long-form content for the company page. Use Heading 2 for sections such as product ranges, service coverage, and support. This is the text search engines read to rank the page."
+      />
+
+      <TextArea
+        label="Frequently asked questions"
+        name="faqs"
+        defaultValue={faqsToLines(company?.faqs)}
+        rows={8}
+        disabled={disabled}
+        placeholder={`Q: Who is the authorized Diversey distributor in Nepal?
+A: Edward Trading Pvt. Ltd. supplies Diversey products across Nepal.
+
+Q: Do you deliver outside Kathmandu?
+A: Yes, nationwide delivery is available.`}
+      />
+
+      <SeoFieldset
+        metaTitle={company?.metaTitle}
+        metaDescription={company?.metaDescription}
+        metaKeywords={company?.metaKeywords}
+        disabled={disabled}
+        titlePlaceholder={
+          company?.name
+            ? `Defaults to: ${company.name} Distributor in Nepal`
+            : "Defaults to the brand name and territory"
+        }
+        descriptionPlaceholder="Defaults to the summary or description above"
+        keywordsPlaceholder={
+          company?.name
+            ? `Extra keywords, one per line. Already covered automatically:\n${distributorKeywordVariants(
+                company.name,
+                company.territory || "Nepal"
+              )
+                .slice(0, 4)
+                .join("\n")}`
+            : "One keyword per line"
+        }
+        note="Distributor search phrases are generated automatically from the brand name and territory. Anything added here is included on top of them."
+      />
+
       <Field label="Sort order" name="sortOrder" type="number" defaultValue={company?.sortOrder ?? 0} disabled={disabled} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Toggle name="isFeatured" label="Feature on website" defaultChecked={company?.isFeatured ?? false} disabled={disabled} />
@@ -601,6 +795,75 @@ function TeamForm({
       <Toggle name="isActive" label="Show on website" defaultChecked={member?.isActive ?? true} disabled={disabled} />
       <div className="md:col-span-2">
         <SaveButton disabled={disabled} label={member ? "Save team member" : "Create team member"} />
+      </div>
+    </form>
+  );
+}
+
+function BlogForm({
+  post,
+  section,
+  disabled
+}: {
+  post?: ManagedBlogPost;
+  section: AdminSection;
+  disabled: boolean;
+}) {
+  // <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" without the zone.
+  const publishedAt = post?.publishedAt
+    ? new Date(post.publishedAt).toISOString().slice(0, 16)
+    : new Date().toISOString().slice(0, 16);
+
+  return (
+    <form action={saveBlogPost} className="grid gap-5 md:grid-cols-2">
+      {hiddenReturnInput(section)}
+      <input type="hidden" name="id" value={post?.id ?? ""} />
+      <Field label="Post title" name="title" defaultValue={post?.title} required disabled={disabled} />
+      <Field label="Slug" name="slug" defaultValue={post?.slug} disabled={disabled} placeholder="auto-generated if blank" />
+      <Field label="Author" name="author" defaultValue={post?.author ?? ""} disabled={disabled} placeholder="Edward Trading Team" />
+      <Field label="Category" name="category" defaultValue={post?.category ?? ""} disabled={disabled} placeholder="Hygiene, Healthcare, Facility Care" />
+      <div className="md:col-span-2">
+        <Field label="Cover image path or URL" name="coverImageUrl" type="text" defaultValue={post?.coverImageUrl} disabled={disabled} placeholder="Auto-filled after upload or paste an existing image URL" />
+      </div>
+      <FileField label="Upload cover image" name="coverImageFile" disabled={disabled} />
+      <div className="md:col-span-2">
+        <Field label="Cover image alt text" name="coverImageAlt" defaultValue={post?.coverImageAlt ?? ""} disabled={disabled} placeholder="Describes the image for search engines and screen readers" />
+      </div>
+      <TextArea
+        label="Preview text"
+        name="excerpt"
+        defaultValue={post?.excerpt ?? ""}
+        rows={3}
+        disabled={disabled}
+        placeholder="Shown on the blog listing card and in social shares. Left blank, the opening of the article is used."
+      />
+
+      <RichTextEditor
+        label="Article content"
+        name="content"
+        defaultValue={post?.content ?? ""}
+        disabled={disabled}
+        minHeight={460}
+        helpText="The post title above is already the page H1. Inside the article, use Heading 2 for sections and Heading 3 for sub-points, bold for emphasis, the link button to hyperlink selected text, and the table button for comparison tables."
+      />
+
+      <SeoFieldset
+        metaTitle={post?.metaTitle}
+        metaDescription={post?.metaDescription}
+        metaKeywords={post?.metaKeywords}
+        disabled={disabled}
+        titlePlaceholder={post ? `Defaults to: ${post.title}` : "Defaults to the post title"}
+        descriptionPlaceholder="Defaults to the preview text"
+      />
+
+      <Field label="Publish date" name="publishedAt" type="datetime-local" defaultValue={publishedAt} disabled={disabled} />
+      <Field label="Sort order" name="sortOrder" type="number" defaultValue={post?.sortOrder ?? 0} disabled={disabled} />
+      <div className="grid gap-3 sm:grid-cols-2 md:col-span-2">
+        <Toggle name="isFeatured" label="Feature on blog" defaultChecked={post?.isFeatured ?? false} disabled={disabled} />
+        <Toggle name="isActive" label="Show on website" defaultChecked={post?.isActive ?? true} disabled={disabled} />
+      </div>
+      <div className="md:col-span-2">
+        <SaveButton disabled={disabled} label={post ? "Save blog post" : "Publish blog post"} />
       </div>
     </form>
   );
@@ -657,6 +920,14 @@ function PageForm({
       <input type="hidden" name="ctaHref" value={page.ctaHref} />
       <Field label="Meta title" name="metaTitle" defaultValue={page.metaTitle} disabled={disabled} />
       <Field label="Meta description" name="metaDescription" defaultValue={page.metaDescription} disabled={disabled} />
+      <TextArea
+        label="Target keywords"
+        name="metaKeywords"
+        defaultValue={keywordsToText(page.metaKeywords)}
+        rows={4}
+        disabled={disabled}
+        placeholder="One keyword per line"
+      />
       <Toggle name="isActive" label="Show on website" defaultChecked={page.isActive} disabled={disabled} />
       <div>
         <SaveButton disabled={disabled} label="Save page content" />
@@ -752,6 +1023,7 @@ export function AdminWorkspace({
   const industriesPage = getPage(data, "industries");
   const partnerCompaniesPage = getPage(data, "partner-companies");
   const contactPage = getPage(data, "contact");
+  const blogPage = getPage(data, "blog");
   const contactResources = data.resources.filter(
     (resource) => resource.groupName === "site_settings"
   );
@@ -787,12 +1059,13 @@ export function AdminWorkspace({
             title="Website content dashboard"
             description="Use the tabs on the left like the website navigation. The site structure is fixed by the website; this area edits content, catalog items, visibility, and inquiries."
           />
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
             {[
               ["Pages", data.pages.length],
               ["Categories", data.categories.length],
               ["Products", data.products.length],
               ["Partner Companies", data.companies.length],
+              ["Blog Posts", data.blogPosts.length],
               ["Inquiries", data.submissions.length]
             ].map(([label, count]) => (
               <div key={label} className="rounded-md bg-light-gray p-5">
@@ -1246,6 +1519,56 @@ export function AdminWorkspace({
                   <TeamForm member={member} section="team" disabled={disabled} />
                   <div className="mt-4">
                     <ArchiveButton table="team_members" id={member.id} returnTo="/admin/team" disabled={disabled} />
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+        ) : null}
+
+        {section === "blog" ? (
+        <section className={sectionClass}>
+          <SectionHeader
+            id="blog"
+            icon={Newspaper}
+            eyebrow="Website Tab"
+            title="Blog"
+            description="Write and publish articles. Each post has its own preview text, cover image, rich content, and search engine settings."
+          />
+          {blogPage ? (
+            <PageEditorList pages={[blogPage]} section="blog" disabled={disabled} />
+          ) : (
+            <MissingPageNotice label="Blog listing page" />
+          )}
+          <div className="mt-6 grid gap-4">
+            <details className={panelClass}>
+              <AddSummary
+                title="Write a blog post"
+                description="Add an article with headings, tables, links, a preview, and SEO settings."
+                icon={Newspaper}
+              />
+              <div className="mt-6 border-t border-charcoal/10 pt-6">
+                <BlogForm section="blog" disabled={disabled} />
+              </div>
+            </details>
+            {data.blogPosts.length === 0 ? (
+              <div className="rounded-md bg-light-gray p-5 text-sm leading-7 text-slate">
+                No blog posts yet. Use the form above to publish the first one.
+              </div>
+            ) : null}
+            {data.blogPosts.map((post) => (
+              <details key={post.id} className={panelClass}>
+                <EditSummary
+                  eyebrow="Blog post"
+                  title={post.title}
+                  meta={`/blog/${post.slug}`}
+                  active={post.isActive}
+                />
+                <div className="mt-6 border-t border-charcoal/10 pt-6">
+                  <BlogForm post={post} section="blog" disabled={disabled} />
+                  <div className="mt-4">
+                    <ArchiveButton table="blog_posts" id={post.id} returnTo="/admin/blog" disabled={disabled} />
                   </div>
                 </div>
               </details>

@@ -1,4 +1,15 @@
-export type Product = {
+/**
+ * Search metadata every CMS-managed page type shares. The fields are optional so
+ * the built-in fallback records stay terse; database rows always populate them
+ * and the `resolve*Seo` helpers in `@/lib/seo` fill any blanks.
+ */
+export type SeoFields = {
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string[];
+};
+
+export type Product = SeoFields & {
   id: string;
   slug: string;
   name: string;
@@ -13,7 +24,7 @@ export type Product = {
   isFeatured: boolean;
 };
 
-export type ProductCategory = {
+export type ProductCategory = SeoFields & {
   id: string;
   slug: string;
   name: string;
@@ -23,7 +34,12 @@ export type ProductCategory = {
   isFeatured: boolean;
 };
 
-export type AssociatedCompany = {
+export type CompanyFaq = {
+  question: string;
+  answer: string;
+};
+
+export type AssociatedCompany = SeoFields & {
   id: string;
   slug: string;
   name: string;
@@ -31,6 +47,33 @@ export type AssociatedCompany = {
   description: string;
   logoUrl: string;
   websiteUrl?: string | null;
+  isFeatured: boolean;
+  /** Small label above the H1, e.g. "Authorized Distributor". */
+  eyebrow?: string;
+  /** H1 override, e.g. "Diversey Distributor in Nepal". */
+  heading?: string;
+  /** Long-form sanitized HTML rendered on the company page. */
+  content?: string;
+  faqs?: CompanyFaq[];
+  highlights?: string[];
+  /** e.g. "Authorized Distributor" - drives on-page copy and schema. */
+  distributorStatus?: string;
+  /** e.g. "Nepal" - drives on-page copy and areaServed schema. */
+  territory?: string;
+};
+
+export type BlogPost = SeoFields & {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  /** Sanitized HTML produced by the CMS rich text editor. */
+  content: string;
+  coverImageUrl: string;
+  coverImageAlt: string;
+  author: string;
+  category: string;
+  publishedAt: string;
   isFeatured: boolean;
 };
 
@@ -288,3 +331,5 @@ export const fallbackTeamMembers: TeamMember[] = [
     sortOrder: 2
   }
 ];
+
+export const fallbackBlogPosts: BlogPost[] = [];
