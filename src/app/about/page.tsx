@@ -31,6 +31,12 @@ export default async function AboutPage() {
     getCmsResources("director_message")
   ]);
   const directorMessage = directorMessages[0];
+  const directorPhoto = directorMessage?.metadata.photo ?? "";
+  // The message is stored as prose, so blank lines separate the paragraphs.
+  const directorParagraphs = (directorMessage?.value ?? "")
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
   const publicProfile = profile.filter(
     (item) => item.key.toLowerCase() !== "company.vat_no"
   );
@@ -110,15 +116,49 @@ export default async function AboutPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
                   Director&apos;s Message
                 </p>
-                <p className="mt-5 max-w-4xl text-base leading-8 text-slate">
-                  {directorMessage.value}
-                </p>
-                <p className="mt-6 font-heading text-xl font-extrabold text-charcoal">
-                  {directorMessage.metadata.author}
-                </p>
-                <p className="mt-1 text-sm font-bold text-primary">
-                  {directorMessage.metadata.role}
-                </p>
+                <div
+                  className={
+                    directorPhoto
+                      ? "mt-7 grid items-start gap-8 md:grid-cols-[minmax(0,17rem)_1fr] md:gap-10"
+                      : "mt-5"
+                  }
+                >
+                  {directorPhoto ? (
+                    <Image
+                      src={directorPhoto}
+                      alt={
+                        directorMessage.metadata.photoAlt ||
+                        [directorMessage.metadata.author, directorMessage.metadata.role]
+                          .filter(Boolean)
+                          .join(", ") ||
+                        "Director"
+                      }
+                      /* The photo's own pixel size, so the browser reserves the
+                         right space and the image keeps its exact proportions. */
+                      width={1265}
+                      height={1698}
+                      sizes="(min-width: 768px) 17rem, 100vw"
+                      className="h-auto w-full max-w-xs rounded-2xl border border-charcoal/10 shadow-sm md:max-w-none"
+                      unoptimized
+                    />
+                  ) : null}
+                  <div>
+                    {directorParagraphs.map((paragraph) => (
+                      <p
+                        key={paragraph}
+                        className="max-w-3xl text-base leading-8 text-slate [&+p]:mt-5"
+                      >
+                        {paragraph}
+                      </p>
+                    ))}
+                    <p className="mt-6 font-heading text-xl font-extrabold text-charcoal">
+                      {directorMessage.metadata.author}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-primary">
+                      {directorMessage.metadata.role}
+                    </p>
+                  </div>
+                </div>
               </div>
             </Reveal>
           </div>
