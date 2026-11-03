@@ -3,12 +3,27 @@ import Image from "next/image";
 import { CheckCircle2 } from "lucide-react";
 import { ContactCta } from "@/components/sections/contact-cta";
 import { PageHero } from "@/components/sections/page-hero";
+import { VideoShowcase } from "@/components/sections/video-showcase";
 import { Reveal } from "@/components/ui/reveal";
 import { getCmsResources, getPageContent, getTeamMembers } from "@/lib/cms-data";
-import { buildMetadata } from "@/lib/seo";
-import { values } from "@/lib/site-data";
+import { absoluteUrl, buildMetadata, organizationId } from "@/lib/seo";
+import { site, values } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
+
+const aboutVideo = {
+  title: `Inside ${site.name}`,
+  description: `A look inside ${site.name}, the Kathmandu-based supplier of medical equipment, healthcare products, surgical instruments, and cleaning and hygiene solutions across Nepal.`,
+  poster: "/videos/edward-trading-about-poster.jpg",
+  // Phones get the 6 MB 720p cut; larger screens the 1080p master.
+  sources: [
+    { src: "/videos/edward-trading-about-720p.mp4", media: "(max-width: 767px)" },
+    { src: "/videos/edward-trading-about-1080p.mp4" }
+  ],
+  duration: "PT52S",
+  durationLabel: "0:52",
+  uploadDate: "2026-11-03"
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("about");
@@ -47,8 +62,24 @@ export default async function AboutPage() {
     (item) => item.key.toLowerCase() !== "company.vat_no"
   );
 
+  const videoJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: aboutVideo.title,
+    description: aboutVideo.description,
+    thumbnailUrl: absoluteUrl(aboutVideo.poster),
+    contentUrl: absoluteUrl(aboutVideo.sources[aboutVideo.sources.length - 1].src),
+    uploadDate: aboutVideo.uploadDate,
+    duration: aboutVideo.duration,
+    publisher: { "@id": organizationId }
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(videoJsonLd) }}
+      />
       <PageHero
         eyebrow={content.eyebrow}
         title={content.title}
@@ -97,6 +128,30 @@ export default async function AboutPage() {
                 ))}
               </div>
             </div>
+          </Reveal>
+        </div>
+      </section>
+      <section className="bg-light-gray py-20">
+        <div className="container-page">
+          <Reveal className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              Watch Our Story
+            </p>
+            <h2 className="mt-4 font-heading text-3xl font-extrabold text-charcoal md:text-5xl">
+              See how we supply healthcare across Nepal
+            </h2>
+            <p className="mt-5 text-base leading-8 text-slate">
+              Meet the team behind {site.name} and the products we supply to
+              hospitals, clinics, and facilities across Nepal.
+            </p>
+          </Reveal>
+          <Reveal delay={0.08} className="mx-auto mt-10 max-w-5xl">
+            <VideoShowcase
+              title={aboutVideo.title}
+              poster={aboutVideo.poster}
+              sources={aboutVideo.sources}
+              durationLabel={aboutVideo.durationLabel}
+            />
           </Reveal>
         </div>
       </section>

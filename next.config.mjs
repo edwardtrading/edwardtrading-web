@@ -1,6 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        // Videos are large and rarely change; cache them in the browser and CDN
+        // for a week so repeat views replay without re-downloading. Upload a
+        // replacement under a new file name to change one immediately.
+        source: "/videos/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=86400"
+          }
+        ]
+      }
+    ];
+  },
   async redirects() {
     // Retired URLs. Permanent redirects pass their search value to the new page.
     return [

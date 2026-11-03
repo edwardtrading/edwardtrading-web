@@ -10,11 +10,10 @@ Deployed on Vercel.
 
 ```bash
 npm install
-cp .env.example .env.local   # then fill in the values below
 npm run dev
 ```
 
-Required environment variables (`.env.local` locally, Project Settings on Vercel):
+Create `.env.local` with these variables (on Vercel, set them in Project Settings):
 
 | Variable | Purpose |
 | --- | --- |
