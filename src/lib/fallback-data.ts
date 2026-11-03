@@ -7,6 +7,8 @@ export type SeoFields = {
   metaTitle?: string;
   metaDescription?: string;
   metaKeywords?: string[];
+  /** Last CMS edit. Drives sitemap `lastmod` and schema `dateModified`. */
+  updatedAt?: string;
 };
 
 export type Product = SeoFields & {

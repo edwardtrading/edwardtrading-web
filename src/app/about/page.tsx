@@ -5,6 +5,7 @@ import { ContactCta } from "@/components/sections/contact-cta";
 import { PageHero } from "@/components/sections/page-hero";
 import { Reveal } from "@/components/ui/reveal";
 import { getCmsResources, getPageContent, getTeamMembers } from "@/lib/cms-data";
+import { buildMetadata } from "@/lib/seo";
 import { values } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +13,15 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("about");
 
-  return {
-    title: content.metaTitle || "About Us",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "About Edward Trading | Healthcare Supplier in Nepal",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: content.metaKeywords,
+    path: "/about",
+    images: [content.imageUrl]
+  });
 }
 
 export default async function AboutPage() {

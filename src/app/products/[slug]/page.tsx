@@ -1,11 +1,26 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, PackageCheck } from "lucide-react";
+import { CheckCircle2, ChevronRight, HelpCircle, PackageCheck } from "lucide-react";
 import { submitProductInquiry } from "@/app/admin/actions";
+import { ProductGrid } from "@/components/products/product-grid";
 import { Button } from "@/components/ui/button";
-import { getPartnerCompanyBySlug, getProductBySlug } from "@/lib/cms-data";
-import { breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
+import {
+  getPartnerCompanyBySlug,
+  getProductBySlug,
+  getProductCategoryBySlug,
+  getProductsByCategory
+} from "@/lib/cms-data";
+import { htmlToPlainText } from "@/lib/rich-text";
+import {
+  absoluteUrl,
+  breadcrumbJsonLd,
+  buildMetadata,
+  faqJsonLd,
+  organizationId,
+  resolveProductPresentation
+} from "@/lib/seo";
 import { site } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
@@ -63,12 +78,21 @@ export async function generateMetadata({
     };
   }
 
+  const [company, category] = await Promise.all([
+    product.companySlug ? getPartnerCompanyBySlug(product.companySlug) : null,
+    getProductCategoryBySlug(product.categorySlug)
+  ]);
+  const presentation = resolveProductPresentation(product, {
+    brand: company?.name,
+    category: category?.name
+  });
+
   return buildMetadata({
     metaTitle: product.metaTitle,
-    fallbackTitle: product.name,
+    fallbackTitle: presentation.fallbackTitle,
     metaDescription: product.metaDescription,
-    descriptionSources: [product.shortDescription, product.description],
-    keywords: product.metaKeywords,
+    descriptionSources: [presentation.fallbackDescription],
+    keywords: presentation.keywords,
     path: `/products/${product.slug}`,
     images: [product.imageUrl]
   });
@@ -86,63 +110,107 @@ export default async function ProductPage({
 
   const specifications = Object.entries(product.specifications);
   const youtubeEmbedUrl = getYoutubeEmbedUrl(product.youtubeUrl);
-  const company = product.companySlug
-    ? await getPartnerCompanyBySlug(product.companySlug)
-    : null;
+  const [company, category, categoryProducts] = await Promise.all([
+    product.companySlug ? getPartnerCompanyBySlug(product.companySlug) : null,
+    getProductCategoryBySlug(product.categorySlug),
+    getProductsByCategory(product.categorySlug)
+  ]);
+  const presentation = resolveProductPresentation(product, {
+    brand: company?.name,
+    category: category?.name
+  });
+  const relatedProducts = categoryProducts
+    .filter((item) => item.slug !== product.slug)
+    .slice(0, 4);
+  const productPath = `/products/${product.slug}`;
+  const productUrl = absoluteUrl(productPath);
 
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
+    "@id": `${productUrl}#product`,
     name: product.name,
-    description: product.description,
-    image: product.imageUrl || undefined,
+    description:
+      htmlToPlainText(product.description) || product.shortDescription || product.name,
+    image: product.imageUrl ? absoluteUrl(product.imageUrl) : undefined,
+    url: productUrl,
     sku: product.slug,
+    category: category?.name,
     brand: company
       ? {
           "@type": "Brand",
           name: company.name
         }
       : undefined,
+    additionalProperty:
+      specifications.length > 0
+        ? specifications.map(([name, value]) => ({
+            "@type": "PropertyValue",
+            name,
+            value
+          }))
+        : undefined,
     offers: {
       "@type": "Offer",
+      url: productUrl,
       availability: "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
       priceCurrency: "NPR",
-      url: `${site.url}/products/${product.slug}`,
-      seller: {
-        "@type": "Organization",
-        name: site.name
-      }
+      areaServed: { "@type": "Country", name: "Nepal" },
+      seller: { "@id": organizationId }
     }
   };
 
-  const breadcrumbs = breadcrumbJsonLd([
+  const trail = [
     { name: "Home", path: "/" },
-    { name: "Solutions", path: "/solutions" },
-    { name: product.name, path: `/products/${product.slug}` }
-  ]);
+    category
+      ? { name: category.name, path: `/categories/${category.slug}` }
+      : { name: "Solutions", path: "/solutions" },
+    { name: product.name, path: productPath }
+  ];
+  const structuredData = [
+    productJsonLd,
+    breadcrumbJsonLd(trail),
+    faqJsonLd(presentation.faqs)
+  ].filter(Boolean);
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(productJsonLd)
-        }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(breadcrumbs)
-        }}
-      />
-      <section className="bg-mesh-warm py-16 md:py-20">
+      {structuredData.map((schema, index) => (
+        <script
+          key={index}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      ))}
+      <nav aria-label="Breadcrumb" className="bg-mesh-warm pt-8">
+        <ol className="container-page flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate">
+          {trail.map((crumb, index) => (
+            <li key={crumb.path} className="inline-flex items-center gap-1.5">
+              {index > 0 ? (
+                <ChevronRight aria-hidden className="h-3.5 w-3.5 text-charcoal/30" />
+              ) : null}
+              {index < trail.length - 1 ? (
+                <Link href={crumb.path} className="transition hover:text-primary">
+                  {crumb.name}
+                </Link>
+              ) : (
+                <span aria-current="page" className="text-charcoal">
+                  {crumb.name}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
+      <section className="bg-mesh-warm pb-16 pt-8 md:pb-20">
         <div className="container-page grid gap-10 lg:grid-cols-[0.9fr_1fr] lg:items-center">
           <div className="relative overflow-hidden rounded-lg bg-white shadow-soft">
             <div className="relative aspect-square">
               {product.imageUrl ? (
                 <Image
                   src={product.imageUrl}
-                  alt={product.name}
+                  alt={company ? `${product.name} by ${company.name}` : product.name}
                   fill
                   priority
                   sizes="(min-width: 1024px) 42vw, 100vw"
@@ -160,7 +228,7 @@ export default async function ProductPage({
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-              Product Details
+              {category ? `${category.name} in Nepal` : "Product Details"}
             </p>
             <h1 className="mt-5 font-heading text-4xl font-extrabold leading-tight text-charcoal text-balance md:text-6xl">
               {product.name}
@@ -168,6 +236,18 @@ export default async function ProductPage({
             <p className="mt-6 text-lg leading-8 text-slate">
               {product.shortDescription}
             </p>
+            {company ? (
+              <p className="mt-4 text-sm font-semibold text-charcoal">
+                Brand:{" "}
+                <Link
+                  href={`/partner-companies/${company.slug}`}
+                  className="text-primary underline underline-offset-2 transition hover:text-primary-light"
+                >
+                  {company.name}
+                </Link>
+                <span className="text-slate"> &middot; supplied across Nepal by {site.name}</span>
+              </p>
+            ) : null}
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/contact">Request Product Inquiry</Button>
               <Button href={`/categories/${product.categorySlug}`} variant="secondary">
@@ -259,6 +339,61 @@ export default async function ProductPage({
                 />
               </div>
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="bg-white py-20">
+        <div className="container-page grid gap-10 lg:grid-cols-[0.8fr_1fr]">
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              <HelpCircle aria-hidden className="h-4 w-4" />
+              Buying in Nepal
+            </p>
+            <h2 className="mt-4 font-heading text-3xl font-extrabold text-charcoal">
+              Buy {product.name} in Nepal
+            </h2>
+            <p className="mt-5 text-base leading-8 text-slate">
+              {site.name} supplies {product.name}
+              {company ? ` from ${company.name}` : ""} to hospitals, clinics,
+              hotels, and institutional buyers across Nepal. Send the quantity you
+              need and your delivery location, and our Kathmandu team will confirm
+              pricing, availability, and delivery timelines.
+            </p>
+          </div>
+          <div className="grid gap-3">
+            {presentation.faqs.map((faq) => (
+              <details
+                key={faq.question}
+                className="group rounded-lg border border-charcoal/10 bg-light-gray p-5"
+              >
+                <summary className="cursor-pointer list-none font-heading text-base font-bold text-charcoal group-open:text-primary">
+                  {faq.question}
+                </summary>
+                <p className="mt-3 text-sm leading-7 text-slate">{faq.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {relatedProducts.length > 0 ? (
+        <section className="bg-light-gray py-20">
+          <div className="container-page">
+            <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <h2 className="font-heading text-3xl font-extrabold text-charcoal">
+                Related {category ? category.name.toLowerCase() : "products"}
+              </h2>
+              {category ? (
+                <Link
+                  href={`/categories/${category.slug}`}
+                  className="text-sm font-bold text-primary underline underline-offset-2"
+                >
+                  View all {category.name.toLowerCase()} in Nepal
+                </Link>
+              ) : null}
+            </div>
+            <ProductGrid products={relatedProducts} />
           </div>
         </section>
       ) : null}

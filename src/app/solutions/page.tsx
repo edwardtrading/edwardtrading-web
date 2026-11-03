@@ -4,16 +4,22 @@ import { PageHero } from "@/components/sections/page-hero";
 import { CategoryCard } from "@/components/products/category-card";
 import { Reveal } from "@/components/ui/reveal";
 import { getPageContent, getProductCategories } from "@/lib/cms-data";
+import { buildMetadata, medicalSupplierKeywords } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("solutions");
 
-  return {
-    title: content.metaTitle || "Solutions",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "Medical, Surgical & Hygiene Products in Nepal",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: [...content.metaKeywords, ...medicalSupplierKeywords],
+    path: "/solutions",
+    images: [content.imageUrl]
+  });
 }
 
 export default async function SolutionsPage() {

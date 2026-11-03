@@ -6,7 +6,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { Reveal } from "@/components/ui/reveal";
 import { getBlogPosts, getPageContent } from "@/lib/cms-data";
 import { readingTimeMinutes } from "@/lib/rich-text";
-import { breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
+import { articleAuthorJsonLd, breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
 import { site } from "@/lib/site-data";
 import { formatPublishedDate } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return buildMetadata({
     metaTitle: content.metaTitle,
-    fallbackTitle: "Blog",
+    fallbackTitle: "Medical & Hygiene Supply Guides for Nepal",
     metaDescription: content.metaDescription,
     descriptionSources: [content.description],
     keywords: content.metaKeywords,
@@ -49,10 +49,7 @@ export default async function BlogPage() {
         url: `${site.url}/blog/${post.slug}`,
         datePublished: post.publishedAt,
         image: post.coverImageUrl || undefined,
-        author: {
-          "@type": post.author ? "Person" : "Organization",
-          name: post.author || site.name
-        }
+        author: articleAuthorJsonLd(post.author)
       }))
     }
   ];

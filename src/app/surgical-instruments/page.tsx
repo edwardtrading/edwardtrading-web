@@ -5,16 +5,22 @@ import { PageHero } from "@/components/sections/page-hero";
 import { ProductGrid } from "@/components/products/product-grid";
 import { Reveal } from "@/components/ui/reveal";
 import { getCmsResources, getPageContent, getProductsByCategory } from "@/lib/cms-data";
+import { buildMetadata, categoryKeywordVariants } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("surgical-instruments");
 
-  return {
-    title: content.metaTitle || "Surgical Instruments",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "Surgical Instruments Supplier in Nepal",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: [...content.metaKeywords, ...categoryKeywordVariants("Surgical instruments")],
+    path: "/surgical-instruments",
+    images: [content.imageUrl]
+  });
 }
 
 export default async function SurgicalInstrumentsPage() {

@@ -10,7 +10,14 @@ import {
   readingTimeMinutes,
   withHeadingIds
 } from "@/lib/rich-text";
-import { breadcrumbJsonLd, buildMetadata } from "@/lib/seo";
+import {
+  absoluteUrl,
+  articleAuthorJsonLd,
+  articlePublisherJsonLd,
+  breadcrumbJsonLd,
+  buildMetadata,
+  toIsoDate
+} from "@/lib/seo";
 import { site } from "@/lib/site-data";
 import { formatPublishedDate } from "@/lib/utils";
 
@@ -71,9 +78,9 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       "@type": "BlogPosting",
       headline: post.title,
       description: post.excerpt,
-      image: post.coverImageUrl || undefined,
+      image: post.coverImageUrl ? absoluteUrl(post.coverImageUrl) : undefined,
       datePublished: post.publishedAt,
-      dateModified: post.publishedAt,
+      dateModified: toIsoDate(post.updatedAt) ?? post.publishedAt,
       articleSection: post.category || undefined,
       keywords:
         post.metaKeywords && post.metaKeywords.length > 0
@@ -83,15 +90,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         "@type": "WebPage",
         "@id": pageUrl
       },
-      author: {
-        "@type": post.author ? "Person" : "Organization",
-        name: post.author || site.name
-      },
-      publisher: {
-        "@type": "Organization",
-        name: site.name,
-        url: site.url
-      }
+      author: articleAuthorJsonLd(post.author),
+      publisher: articlePublisherJsonLd()
     }
   ];
 

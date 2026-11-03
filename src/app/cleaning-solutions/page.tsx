@@ -5,24 +5,42 @@ import { PageHero } from "@/components/sections/page-hero";
 import { ProductGrid } from "@/components/products/product-grid";
 import { Reveal } from "@/components/ui/reveal";
 import { getCmsResources, getPageContent, getProductsByCategory } from "@/lib/cms-data";
+import { buildMetadata, categoryKeywordVariants } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("cleaning-solutions");
 
-  return {
-    title: content.metaTitle || "Cleaning Solutions",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "Cleaning & Hygiene Solutions Supplier in Nepal",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: [
+      ...content.metaKeywords,
+      ...categoryKeywordVariants("Cleaning and hygiene solutions"),
+      ...categoryKeywordVariants("Cleaning chemicals")
+    ],
+    path: "/cleaning-solutions",
+    images: [content.imageUrl]
+  });
 }
 
+/**
+ * The built-in category is "cleaning-solutions", but the live CMS files these
+ * products under "hygiene-and-housekeeping-solutions"; reading both keeps the
+ * page populated whichever one an editor uses.
+ */
+const cleaningCategorySlugs = ["cleaning-solutions", "hygiene-and-housekeeping-solutions"];
+
 export default async function CleaningSolutionsPage() {
-  const [content, products, categories] = await Promise.all([
+  const [content, productLists, categories] = await Promise.all([
     getPageContent("cleaning-solutions"),
-    getProductsByCategory("cleaning-solutions"),
+    Promise.all(cleaningCategorySlugs.map((slug) => getProductsByCategory(slug))),
     getCmsResources("cleaning_categories")
   ]);
+  const products = productLists.flat();
 
   return (
     <>

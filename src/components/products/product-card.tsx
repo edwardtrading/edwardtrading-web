@@ -32,9 +32,9 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
       </div>
       <div className="p-5">
-        <h2 className="font-heading text-lg font-bold leading-6 text-charcoal">
+        <h3 className="font-heading text-lg font-bold leading-6 text-charcoal">
           {product.name}
-        </h2>
+        </h3>
       </div>
     </Link>
   );

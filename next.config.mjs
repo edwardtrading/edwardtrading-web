@@ -1,5 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
+  async redirects() {
+    // Retired URLs. Permanent redirects pass their search value to the new page.
+    return [
+      {
+        source: "/associated-companies",
+        destination: "/partner-companies",
+        permanent: true
+      },
+      {
+        source: "/diversey-taski",
+        destination: "/partner-companies",
+        permanent: true
+      }
+    ];
+  },
   images: {
     remotePatterns: [
       {

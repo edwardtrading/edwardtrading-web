@@ -3,18 +3,14 @@ import {
   BriefcaseBusiness,
   Building2,
   Factory,
-  FlaskConical,
   HeartPulse,
   Hotel,
   Layers3,
   Leaf,
   MapPin,
-  PackageCheck,
   Phone,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
-  Stethoscope,
   Truck,
   UsersRound,
   Utensils
@@ -22,10 +18,13 @@ import {
 
 export const site = {
   name: "Edward Trading Pvt. Ltd.",
+  shortName: "Edward Trading",
   description:
     "Nepal-based healthcare and trading company supplying diagnostic equipment, healthcare products, surgical items, medical equipment, cleaning and hygiene solutions, and hospital furniture.",
   url: "https://www.edwardtrading.com",
-  phone: "+977-01-XXXXXXX",
+  logo: "/edward-trading-logo.png",
+  foundingDate: "2020",
+  phone: "+977-9851105173",
   email: "info@edwardtrading.com",
   address: "Tripureshwor-11, Kathmandu",
   mapsUrl: "https://maps.google.com/?q=Tripureshwor-11%2C%20Kathmandu"
@@ -123,14 +122,3 @@ export const values = [
   "Transparent communication",
   "Long-term partnership"
 ];
-
-export const contactInterests = [
-  "Diagnostic equipment",
-  "Healthcare products",
-  "Surgical instruments",
-  "Medical equipment",
-  "Cleaning and hygiene",
-  "Hospital furniture",
-  "General inquiry"
-];
-

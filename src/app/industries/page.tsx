@@ -3,6 +3,7 @@ import { ContactCta } from "@/components/sections/contact-cta";
 import { PageHero } from "@/components/sections/page-hero";
 import { Reveal } from "@/components/ui/reveal";
 import { getPageContent } from "@/lib/cms-data";
+import { buildMetadata } from "@/lib/seo";
 import { industries } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +11,15 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("industries");
 
-  return {
-    title: content.metaTitle || "Areas We Serve",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "Hospitals, Hotels & Facilities We Supply in Nepal",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: content.metaKeywords,
+    path: "/industries",
+    images: [content.imageUrl]
+  });
 }
 
 export default async function IndustriesPage() {

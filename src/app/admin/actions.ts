@@ -1075,9 +1075,3 @@ export async function submitProductInquiry(formData: FormData) {
   revalidatePath("/admin/inquiries");
   redirect(`/products/${productSlug}?inquiry=1`);
 }
-
-export const createProduct = saveProduct;
-export const createProductCategory = saveProductCategory;
-export const createAssociatedCompany = saveAssociatedCompany;
-export const createTeamMember = saveTeamMember;
-export const createBlogPost = saveBlogPost;

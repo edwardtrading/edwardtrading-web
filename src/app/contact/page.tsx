@@ -9,16 +9,22 @@ import {
   getProductCategories,
   getSiteSettings
 } from "@/lib/cms-data";
+import { buildMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getPageContent("contact");
 
-  return {
-    title: content.metaTitle || "Contact Us",
-    description: content.metaDescription || content.description
-  };
+  return buildMetadata({
+    metaTitle: content.metaTitle,
+    fallbackTitle: "Contact Edward Trading | Request a Product Quote",
+    metaDescription: content.metaDescription,
+    descriptionSources: [content.description],
+    keywords: content.metaKeywords,
+    path: "/contact",
+    images: [content.imageUrl]
+  });
 }
 
 type ContactPageProps = {

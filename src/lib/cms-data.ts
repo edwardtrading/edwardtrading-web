@@ -101,7 +101,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Explore Solutions",
     ctaHref: "/solutions",
-    metaTitle: site.name,
+    metaTitle: "Medical Equipment Supplier in Nepal | Edward Trading",
     metaDescription: site.description,
     metaKeywords: [],
     isActive: true
@@ -206,7 +206,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "About Us",
+    metaTitle: "About Edward Trading | Healthcare Supplier in Nepal",
     metaDescription:
       "Learn about Edward Trading Pvt. Ltd., a Nepal-based healthcare and trading company established in 2020.",
     metaKeywords: [],
@@ -222,7 +222,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Solutions",
+    metaTitle: "Medical, Surgical & Hygiene Products in Nepal",
     metaDescription:
       "Explore diagnostic equipment, healthcare products, surgical instruments, medical equipment, cleaning and hygiene solutions, and hospital furniture in Nepal.",
     metaKeywords: [],
@@ -238,7 +238,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Partner Companies",
+    metaTitle: "Partner Brands & Distributorships in Nepal",
     metaDescription:
       "View partner companies and supplier relationships for Edward Trading Pvt. Ltd.",
     metaKeywords: [],
@@ -254,7 +254,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Cleaning & Hygiene",
+    metaTitle: "Cleaning & Hygiene Solutions Supplier in Nepal",
     metaDescription:
       "Cleaning accessories, hygiene chemicals, facility care products, and institutional cleaning support in Nepal.",
     metaKeywords: [],
@@ -270,7 +270,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Surgical Instruments",
+    metaTitle: "Surgical Instruments Supplier in Nepal",
     metaDescription:
       "Surgical items, healthcare products, diagnostic equipment, and medical supply support for healthcare teams in Nepal.",
     metaKeywords: [],
@@ -286,7 +286,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Areas We Serve",
+    metaTitle: "Hospitals, Hotels & Facilities We Supply in Nepal",
     metaDescription:
       "Edward Trading Pvt. Ltd. serves hospitals, clinics, hotels, commercial buildings, institutions, facility teams, and buyers across Nepal.",
     metaKeywords: [],
@@ -302,9 +302,25 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "Contact Edward Trading",
     ctaHref: "/contact",
-    metaTitle: "Blog",
+    metaTitle: "Medical & Hygiene Supply Guides for Nepal",
     metaDescription:
       "Healthcare, cleaning, hygiene, and institutional supply insights for hospitals, hotels, and facility teams in Nepal.",
+    metaKeywords: [],
+    isActive: true
+  },
+  {
+    slug: "medical-equipment-supplier",
+    eyebrow: "Medical Equipment Supplier in Nepal",
+    title: "Medical equipment, surgical and hospital supplies for Nepal.",
+    description:
+      "Edward Trading Pvt. Ltd. is a Kathmandu-based medical equipment supplier serving hospitals, clinics, laboratories, and healthcare facilities across Nepal with diagnostic devices, surgical instruments, healthcare products, hygiene solutions, and hospital furniture.",
+    imageUrl: "",
+    videoUrl: "",
+    ctaLabel: "Request a Quote",
+    ctaHref: "/contact",
+    metaTitle: "Medical Equipment Supplier in Nepal | Edward Trading",
+    metaDescription:
+      "Medical equipment supplier in Nepal for hospitals and clinics: diagnostic devices, surgical instruments, healthcare products and hospital supplies from Kathmandu.",
     metaKeywords: [],
     isActive: true
   },
@@ -318,7 +334,7 @@ export const defaultPages: CmsPage[] = [
     videoUrl: "",
     ctaLabel: "View Solutions",
     ctaHref: "/solutions",
-    metaTitle: "Contact Us",
+    metaTitle: "Contact Edward Trading | Request a Product Quote",
     metaDescription:
       "Contact Edward Trading Pvt. Ltd. for diagnostic equipment, healthcare products, surgical items, medical equipment, cleaning and hygiene solutions, and hospital furniture.",
     metaKeywords: [],
@@ -587,7 +603,8 @@ function productFromRow(row: DbRow): Product {
     metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
     metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
     metaKeywords: parseKeywords(row.meta_keywords),
-    isFeatured: Boolean(row.is_featured)
+    isFeatured: Boolean(row.is_featured),
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined
   };
 }
 
@@ -602,7 +619,8 @@ function categoryFromRow(row: DbRow): ProductCategory {
     metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
     metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
     metaKeywords: parseKeywords(row.meta_keywords),
-    isFeatured: Boolean(row.is_featured)
+    isFeatured: Boolean(row.is_featured),
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined
   };
 }
 
@@ -769,7 +787,8 @@ function companyFromRow(row: DbRow): AssociatedCompany {
     metaTitle: removeRetiredPublicCopy(String(row.meta_title ?? "")),
     metaDescription: removeRetiredPublicCopy(String(row.meta_description ?? "")),
     metaKeywords: parseKeywords(row.meta_keywords),
-    isFeatured: Boolean(row.is_featured)
+    isFeatured: Boolean(row.is_featured),
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined
   };
 }
 
@@ -788,7 +807,8 @@ function blogPostFromRow(row: DbRow): BlogPost {
     metaTitle: String(row.meta_title ?? ""),
     metaDescription: String(row.meta_description ?? ""),
     metaKeywords: parseKeywords(row.meta_keywords),
-    isFeatured: Boolean(row.is_featured)
+    isFeatured: Boolean(row.is_featured),
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined
   };
 }
 

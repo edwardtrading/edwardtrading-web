@@ -3,6 +3,12 @@ import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { getProductCategories, getSiteSettings } from "@/lib/cms-data";
+import {
+  medicalSupplierKeywords,
+  organizationJsonLd,
+  websiteJsonLd
+} from "@/lib/seo";
 import { site } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
@@ -21,10 +27,12 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: `${site.name} | Cleaning, Hygiene & Institutional Supplies in Nepal`,
+    default: `Medical Equipment Supplier in Nepal | ${site.name}`,
     template: `%s | ${site.name}`
   },
   description: site.description,
+  applicationName: site.name,
+  publisher: site.name,
   icons: {
     icon: [
       {
@@ -36,57 +44,53 @@ export const metadata: Metadata = {
     apple: "/edward-trading-favicon.png"
   },
   keywords: [
-    "Edward Trading Pvt. Ltd.",
-    "cleaning solutions Nepal",
+    ...medicalSupplierKeywords,
     "Diversey Nepal",
     "TASKI Nepal",
-    "surgical instruments Nepal",
     "institutional supplies Nepal"
   ],
   openGraph: {
-    title: `${site.name} | Trading & Distribution in Nepal`,
+    title: `Medical Equipment Supplier in Nepal | ${site.name}`,
     description: site.description,
     url: site.url,
     siteName: site.name,
     locale: "en_US",
-    type: "website"
+    type: "website",
+    images: [site.logo]
   },
   robots: {
     index: true,
-    follow: true
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1
+    }
   }
 };
 
-const organizationJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: site.name,
-  url: site.url,
-  email: site.email,
-  telephone: site.phone,
-  address: {
-    "@type": "PostalAddress",
-    addressLocality: "Kathmandu",
-    addressCountry: "NP"
-  },
-  areaServed: "Nepal",
-  description: site.description
-};
-
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [settings, categories] = await Promise.all([
+    getSiteSettings(),
+    getProductCategories()
+  ]);
+  const structuredData = [organizationJsonLd(settings, categories), websiteJsonLd()];
+
   return (
     <html lang="en">
       <body className={cn(inter.variable, manrope.variable, "font-sans antialiased")}>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationJsonLd)
-          }}
-        />
+        {structuredData.map((schema, index) => (
+          <script
+            key={index}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
+        ))}
         <Navbar />
         <main>{children}</main>
         <Footer />

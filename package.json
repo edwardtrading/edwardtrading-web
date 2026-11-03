@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "node db/migrate.mjs",
-    "db:seed-company-seo": "node db/seed-company-seo.mjs"
+    "db:seed-company-seo": "node db/seed-company-seo.mjs",
+    "db:seed-page-seo": "node db/seed-page-seo.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
